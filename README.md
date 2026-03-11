@@ -25,10 +25,9 @@ To build GNAT LLVM from sources, follow these steps:
       git clone https://github.com/AdaCore/gnat-llvm.git
       cd gnat-llvm
 
-- Then obtain a check out of the latest GNAT sources from gcc.gnu.org under
-  the llvm-interface directory:
+- Then obtain a checkout of GCC under the llvm-interface directory:
 
-      git clone git://gcc.gnu.org/git/gcc.git llvm-interface/gcc
+      git clone https://github.com/gcc-mirror/gcc.git llvm-interface/gcc
 
   then under non Windows systems:
 
@@ -49,12 +48,12 @@ To build GNAT LLVM from sources, follow these steps:
 - Install LLVM and Clang 21.1.x
 
   The recommended way to build GNAT LLVM is to use an existing LLVM and Clang
-  package installed via e.g. `brew install llvm` on macOS or `sudo apt-get
-  install llvm-dev` on Ubuntu. You can also build LLVM yourself with the options
-  that suit your needs. You may want to use the lightly patched version that we
-  maintain at https://github.com/AdaCore/llvm-project. After
-  installing/building, make sure the LLVM bin directory containing `llvm-config`
-  and `clang` is in your `PATH`.
+  package installed via e.g. `brew install llvm` on macOS or your
+  distribution's LLVM/Clang 21 packages. You can also build LLVM yourself with
+  the options that suit your needs. You may want to use the lightly patched
+  version that we maintain at https://github.com/AdaCore/llvm-project. After
+  installing/building, make sure the LLVM bin directory containing
+  `llvm-config` and `clang` is in your `PATH`.
 
   Alternatively, you can invoke make with an environment variable named 
   `LLVM_CONFIG` pointing to your `llvm-config` binary, this way the LLVM you
@@ -78,6 +77,16 @@ To build GNAT LLVM from sources, follow these steps:
 
       make
 
+  On systems where the Clang C++ API is packaged as `clang-cpp` rather than
+  `clangBasic` (for example Arch Linux), use:
+
+      make CLANG_LINK_LIB=clang-cpp
+
+  If the built tools cannot locate LLVM shared libraries at runtime, pass
+  `LD_LIBRARY_PATH` when invoking `make`:
+
+      LD_LIBRARY_PATH=/usr/lib make
+
   This creates a "ready to use" set of directories "bin" and "lib" under
   llvm-interface which you can put in your PATH:
 
@@ -89,6 +98,13 @@ To build GNAT LLVM from sources, follow these steps:
 
   This will generate `libgnat.bc` and `libgnarl.bc` in the `adalib` directory, along
   with `libgnat.a` and `libgnarl.a`.
+
+Additional docs
+---------------
+
+- GCC 15 compiler migration notes: [llvm-interface/PORTING-GCC15.md](llvm-interface/PORTING-GCC15.md)
+- Separate runtime packaging support: [llvm-interface/SEPARATE-RUNTIMES.md](llvm-interface/SEPARATE-RUNTIMES.md)
+- WebAssembly runtime build workflow: [llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md)
 
 Usage
 -----
