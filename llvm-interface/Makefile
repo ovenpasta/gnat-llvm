@@ -41,7 +41,9 @@ ALL_CXXFLAGS=$(shell $(LLVM_CONFIG) --cxxflags) $(CXXFLAGS) $(CLANG_CXXFLAGS) -I
 LLVM_INCLUDE_DIR=$(shell $(LLVM_CONFIG) --includedir)
 LLVM_VERSION=$(shell $(LLVM_CONFIG) --version | cut -d. -f1)
 
-GPRBUILD=gprbuild -v -n -XLLVM_Version=$(LLVM_VERSION) -x
+CLANG_LINK_LIB ?= clangBasic
+
+GPRBUILD=gprbuild -v -n -XLLVM_Version=$(LLVM_VERSION) -XClang_Link_Lib=$(CLANG_LINK_LIB) -x
 
 ifeq ($(OS),Windows_NT)
   LN_S=cp -p
@@ -294,9 +296,10 @@ gnatlib-bc:
 quicklib: $(RTSDIR) $(LIBEXEC_DIR)
 	PATH=$(pwd)/bin:$(clang_path):$$PATH \
 	$(GPRBUILD) -p --target=$(target) $(RTSSWITCH) -j$(PROCS) -P$(RTSDIR)/libada \
-	  -XCFLAGS="$(CFLAGS) -Wno-implicit-function-declaration -I$(LLVM_INCLUDE_DIR)" \
+	  -XCFLAGS="$(CFLAGS) -I$(LLVM_INCLUDE_DIR)" \
 	  -XEXTRALIBFLAGS="$(EXTRALIBFLAGS)" \
-	  -XLIBRARY_KIND=$(LIBRARY_KIND) -XLIBRARY_VERSION=$(LIBRARY_VERSION)
+	  -XLIBRARY_KIND=$(LIBRARY_KIND) -XLIBRARY_VERSION=$(LIBRARY_VERSION) \
+	  -cargs:c -Wno-implicit-function-declaration -margs
 	cd $(RTSLIB) && $(CHMOD) a-wx *.ali
 
 $(RTSDIR):

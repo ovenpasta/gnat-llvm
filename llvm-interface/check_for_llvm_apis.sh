@@ -57,7 +57,7 @@ int main ()
 EOF
 
     if g++ $cxxflags $filename $ldflags -o $exe; then
-	export LD_LIBRARY_PATH=$($llvm_config --libdir):$LD_LIBRARY_PATH
+	export LD_LIBRARY_PATH=$($llvm_config --libdir):${LD_LIBRARY_PATH:-}
 	if $exe ; then
 	    echo "#define GNAT_LLVM_$defname" >obj/def_${defname}.h
 	fi
