@@ -24,9 +24,6 @@ gnat-llvm/
   llvm-interface/           # Main working directory
     gcc/                    # GCC 15 source tree (contains gcc/ada = GNAT frontend)
     gnat_src -> gcc/gcc/ada # Symlink to GNAT frontend sources
-    adawebpack_src/         # adawebpack project (WASM runtime overrides + examples)
-      source/rtl/           # Custom WASM runtime source files
-      examples/             # Example Ada-to-WASM projects
     rts-sources/            # Additional RTS sources (math, memory, etc.)
     bb-runtimes/            # Bare-board runtimes (math sources originate here)
     Makefile                # Main Makefile (compiler + native RTS)
@@ -139,8 +136,7 @@ LD_LIBRARY_PATH=/usr/lib make wasm CLANG_LINK_LIB=clang-cpp
    `lib/gnat-llvm/wasm32/rts-wasm/adainclude/`
    from three locations:
    - `gnat_src/libgnat/` — upstream GNAT runtime sources
-   - `adawebpack_src/source/rtl/` — WASM-specific overrides (simplified
-     exception handling, finalization, memory, soft links, etc.)
+   - the WASM runtime override source tree referenced by `Makefile.target`
    - `rts-sources/` — math library, memory operations, light runtime pieces
 
 2. **Compiles spec-only files** — Certain `.ads` files need to be compiled
@@ -174,40 +170,26 @@ lib/gnat-llvm/wasm32/rts-wasm/
     *.ali         # Ada Library Information files
 ```
 
-## Step 4: Build adawebpack Examples
+## Step 4: Use the Packaged Runtime
 
-Build the example projects using gprbuild's auto-configuration with
-explicit target and RTS flags:
+Consumer projects should use the packaged runtime root directly:
 
 ```bash
 cd gnat-llvm/llvm-interface
 PATH=$(pwd)/bin:$PATH \
-  make -C adawebpack_src build_examples \
-    GPRBUILD_FLAGS="--target=llvm --RTS=$(pwd)/lib/gnat-llvm/wasm32/rts-wasm"
+  gprbuild --target=llvm \
+    --RTS=$(pwd)/lib/gnat-llvm/wasm32/rts-wasm \
+    -P your_project.gpr
 ```
 
 The `--target=llvm` flag tells gprbuild to auto-discover the `llvm-gcc`
-compiler on PATH. The `--RTS=` flag points to the WASM runtime we just
-built, so the binder can find the `.ali` files in `adalib/`.
+compiler on `PATH`. The `--RTS=` flag points to the packaged WASM runtime,
+so the binder can find both the `.ali` files in `adalib/` and the
+runtime-specific `target.atp`.
 
 **Note:** Using `--config=<file>.cgpr` instead of auto-configuration does
-**not** work — gprbuild does not pass the runtime adalib path to the binder
-in that mode. Always use `--target=llvm --RTS=<path>` for WASM projects.
-
-### Available examples
-
-| Example | Description |
-|---------|-------------|
-| `call_ada` | Call an Ada function from JavaScript |
-| `toggle_hidden` | DOM manipulation from Ada |
-| `webgl_basic` | WebGL rendering from Ada |
-
-### Current status
-
-All three examples compile, bind, and link successfully, producing `.wasm`
-binaries. Some harmless `wasm-ld` warnings about non-WASM archive members
-in `libgnat.a` can be ignored (they come from spec-only instantiation files
-that produce empty `.o` files).
+not work for this flow, because gprbuild does not pass the runtime adalib
+path to the binder in that mode. Use `--target=llvm --RTS=<path>`.
 
 ## Troubleshooting
 
@@ -267,4 +249,3 @@ warnings. The local copies under `rts-sources/math/` have been fixed to
 - `PORTING-GCC15.md` — GNAT-LLVM compiler-side GCC 15 / WASM notes
 - `SEPARATE-RUNTIMES.md` — Separate runtime packaging and `--RTS=` support
 - `Makefile.target` — WASM RTS build rules and file lists
-- `adawebpack_src/source/rtl/` — WASM-specific runtime overrides
