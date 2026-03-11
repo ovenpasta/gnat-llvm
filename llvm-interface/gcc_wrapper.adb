@@ -80,6 +80,11 @@ procedure GCC_Wrapper is
      and then Switch (Switch'Last - S'Length + 1 .. Switch'Last) = S);
    --  Return True if Switch ends with S
 
+   function Starts_With (Switch, S : String) return Boolean is
+     (Switch'Length >= S'Length
+     and then Switch (Switch'First .. Switch'First + S'Length - 1) = S);
+   --  Return True if Switch starts with S
+
    function Argument_Exists (Arg : String) return Boolean;
    --  Check if Arg is already on the list.
 
@@ -480,11 +485,28 @@ begin
       end;
    end loop;
 
-   --  Tell Clang which target to compile or link for
+   --  Tell Clang which target to compile or link for, but only if the
+   --  user has not already specified one (e.g. --target=wasm32 for
+   --  cross-compilation).
 
    if Compiler /= Ada_Frontend or else not Compile then
-      Append_Argument ("-target");
-      Append_Argument (Default_Target_Triple);
+      declare
+         Has_Target : Boolean := False;
+      begin
+         for J in 1 .. Arg_Count loop
+            if Args (J).all = "-target"
+              or else Starts_With (Args (J).all, "--target=")
+            then
+               Has_Target := True;
+               exit;
+            end if;
+         end loop;
+
+         if not Has_Target then
+            Append_Argument ("-target");
+            Append_Argument (Default_Target_Triple);
+         end if;
+      end;
    end if;
 
    --  Compile c/c++ files with clang

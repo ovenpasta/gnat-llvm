@@ -13,6 +13,7 @@ project Gnat_LLVM is
 
    type Supported_LLVM_Version is ("19", "21");
    LLVM_Version : Supported_LLVM_Version := External ("LLVM_Version", "19");
+   Clang_Link_Lib := External ("Clang_Link_Lib", "clangBasic");
 
    package Builder is
       for Executable ("gnat1drv.adb") use "llvm-gnat1";
@@ -40,7 +41,7 @@ project Gnat_LLVM is
       --  Force -static-libgcc via Required_Switches so that gprbuild does
       --  not override it.
       for Required_Switches use ("-static-libgcc");
-      for Switches ("Ada") use ("-static-libstdc++", "-lclangBasic");
+      for Switches ("Ada") use ("-static-libstdc++", "-l" & Clang_Link_Lib);
    end Linker;
 
    package CodePeer is
