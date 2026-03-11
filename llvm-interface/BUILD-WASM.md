@@ -3,6 +3,10 @@
 Complete instructions for building the GNAT-LLVM compiler and the WASM
 runtime library, then compiling Ada programs targeting WebAssembly.
 
+The compiler-side WebAssembly backend handling is target-conditional. The
+runtime build documented here is specifically for the current `wasm32`
+runtime package.
+
 ## Prerequisites
 
 - **GCC 15** with GNAT (Ada compiler) — used to build the GNAT-LLVM compiler
@@ -104,7 +108,8 @@ does not detect changes in deeply-nested dependencies.
 
 ## Step 3: Build the WASM Runtime (RTS)
 
-This is the core step that builds `libgnat.a` for the `wasm32` target:
+This is the core step that builds `libgnat.a` for the current `wasm32`
+runtime target:
 
 ```bash
 cd gnat-llvm/llvm-interface
@@ -187,6 +192,12 @@ compiler on `PATH`. The `--RTS=` flag points to the packaged WASM runtime,
 so the binder can find both the `.ali` files in `adalib/` and the
 runtime-specific `target.atp`.
 
+This `--RTS=` is currently required for non-host targets such as `wasm32`.
+The host native runtime can be used without `--RTS` when installed in the
+default structured location under `lib/gnat-llvm/<host-target>/rts-native`.
+Automatic target-based runtime selection for non-host targets is not currently
+implemented.
+
 **Note:** Using `--config=<file>.cgpr` instead of auto-configuration does
 not work for this flow, because gprbuild does not pass the runtime adalib
 path to the binder in that mode. Use `--target=llvm --RTS=<path>`.
@@ -228,8 +239,9 @@ See `PORTING-GCC15.md` for details.
 This error occurs if the `nest` attribute fix has not been applied to
 `gnatllvm-instructions.adb` and `gnatllvm-subprograms.adb`. The LLVM `nest`
 attribute requires trampoline support, which WASM lacks. The fix skips the
-attribute when `Force_Activation_Record_Parameter` is True (the WASM code
-path). See `PORTING-GCC15.md` for the specific changes.
+attribute when explicit activation-record parameter handling is in use for
+the active WebAssembly target. See `PORTING-GCC15.md` for the specific
+changes.
 
 ### `Incorrect number of arguments passed to called function` for `__finalizer`
 

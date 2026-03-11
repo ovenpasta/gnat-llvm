@@ -263,6 +263,29 @@ package body GNATLLVM.Utils is
       end if;
    end Check_Convention;
 
+   ---------------------------
+   -- Is_WebAssembly_Target --
+   ---------------------------
+
+   function Is_WebAssembly_Target return Boolean is
+     (Target_Triple /= null
+      and then (Starts_With (Target_Triple.all, "wasm32")
+                  or else Starts_With (Target_Triple.all, "wasm64")));
+
+   ----------------------------------------------
+   -- Uses_Explicit_Activation_Record_Parameter --
+   ----------------------------------------------
+
+   function Uses_Explicit_Activation_Record_Parameter return Boolean is
+     (Force_Activation_Record_Parameter or else Is_WebAssembly_Target);
+
+   ----------------------------
+   -- Can_Use_Nest_Attribute --
+   ----------------------------
+
+   function Can_Use_Nest_Attribute return Boolean is
+     (not Uses_Explicit_Activation_Record_Parameter);
+
       --------------------------
    -- GNAT_To_LLVM_Convention --
    -----------------------------

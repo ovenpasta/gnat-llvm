@@ -460,7 +460,7 @@ package body GNATLLVM.Blocks is
                                Full_GL_Type (Extra_Formals (End_Subp)));
             end if;
 
-         elsif Force_Activation_Record_Parameter
+         elsif Uses_Explicit_Activation_Record_Parameter
            and then not Has_Foreign_Convention (End_Subp)
          then
             --  On targets like WebAssembly that require strict parameter

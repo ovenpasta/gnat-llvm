@@ -225,6 +225,10 @@ LIBRARY_KIND=static
 ADAC=$(pwd)/bin/llvm-gcc
 CROSSGCC=gcc
 
+# GNAT-LLVM does not support the Ada/C++ interop path used by raise-gcc.c.
+# Force the runtime build to use its non-C++-interop configuration.
+EXTRALIBFLAGS += -DGXX_EH_INTEROP=0
+
 OSCONS_CC=$(CROSSGCC)
 OSCONS_CPP=$(OSCONS_CC) -E -C -DTARGET=\"$(target)\" -iquote $(GNAT_SRC) \
   $(GNAT_SRC)/s-oscons-tmplt.c > s-oscons-tmplt.i
@@ -301,6 +305,14 @@ quicklib: $(RTSDIR) $(LIBEXEC_DIR)
 	  -XLIBRARY_KIND=$(LIBRARY_KIND) -XLIBRARY_VERSION=$(LIBRARY_VERSION) \
 	  -cargs:c -Wno-implicit-function-declaration -margs
 	cd $(RTSLIB) && $(CHMOD) a-wx *.ali
+	printf 'procedure Gnatllvm_Target_Info is begin null; end Gnatllvm_Target_Info;\n' \
+	  > $(RTSOBJ)/gnatllvm_target_info.adb
+	PATH=$(pwd)/bin:$(clang_path):$$PATH \
+	$(ADAC) -c -gnatet=$(RTS)/target.atp $(RTSOBJ)/gnatllvm_target_info.adb
+	$(RM) $(RTSOBJ)/gnatllvm_target_info.adb \
+	  $(RTSOBJ)/gnatllvm_target_info.ali $(RTSOBJ)/gnatllvm_target_info.o
+	echo "adainclude" > $(RTS)/ada_source_path
+	echo "adalib" > $(RTS)/ada_object_path
 
 $(RTSDIR):
 	$(RMDIR) $(RTS)
