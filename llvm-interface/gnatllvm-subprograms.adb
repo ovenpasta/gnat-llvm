@@ -2954,6 +2954,7 @@ package body GNATLLVM.Subprograms is
                   Add_Readonly_Attribute        (LLVM_Func, Param_Num);
 
                   if not Restrictions_On_Target.Set (No_Implicit_Dynamic_Code)
+                    and then not Force_Activation_Record_Parameter
                   then
                      Add_Nest_Attribute         (LLVM_Func, Param_Num);
                   end if;
