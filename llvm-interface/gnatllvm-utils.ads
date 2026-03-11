@@ -74,6 +74,17 @@ package GNATLLVM.Utils is
    --  Validate that we support the Convention on E and give an error if we
    --  don't.
 
+   function Is_WebAssembly_Target return Boolean;
+   --  Return True iff the current target triple is a WebAssembly target.
+
+   function Uses_Explicit_Activation_Record_Parameter return Boolean;
+   --  Return True iff the current target requires an explicit activation
+   --  record parameter to preserve call/declaration agreement.
+
+   function Can_Use_Nest_Attribute return Boolean;
+   --  Return True iff the current target can represent nested-subprogram
+   --  activation records with LLVM's nest attribute.
+
    function Has_Stdcall_Convention (V : Value_T) return Boolean is
      (Get_Function_Call_Conv (V) = X86_Stdcall_Call_Conv);
 

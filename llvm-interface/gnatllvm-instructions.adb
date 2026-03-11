@@ -1770,7 +1770,7 @@ package body GNATLLVM.Instructions is
 
       if Act_Param >= 0
         and then not Restrictions_On_Target.Set (No_Implicit_Dynamic_Code)
-        and then not Force_Activation_Record_Parameter
+        and then Can_Use_Nest_Attribute
       then
          Add_Nest_Attribute (Call_Inst, unsigned (Act_Param));
       end if;

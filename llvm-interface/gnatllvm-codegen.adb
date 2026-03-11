@@ -44,6 +44,7 @@ with Switch;   use Switch;
 with Targparm; use Targparm;
 
 with GNATLLVM.Helper;  use GNATLLVM.Helper;
+with GNATLLVM.Utils;   use GNATLLVM.Utils;
 with GNATLLVM.Wrapper; use GNATLLVM.Wrapper;
 
 package body GNATLLVM.Codegen is
@@ -571,7 +572,6 @@ package body GNATLLVM.Codegen is
       Addrs        : Switch_Addrs      :=
         (1 => Opt1'Address, 2 => Opt2'Address, others => <>);
       Ptr_Err_Msg  : aliased Ptr_Err_Msg_Type;
-      TT_First     : constant Integer  := Target_Triple'First;
       Success      : Boolean;
       TM_Options   : Target_Machine_Options_T;
 
@@ -749,7 +749,7 @@ package body GNATLLVM.Codegen is
 
       --  ??? Replace this by a parameter in system.ads or target.atp
 
-      if Target_Triple (TT_First .. TT_First + 3) = "wasm" then
+      if Is_WebAssembly_Target then
          Force_Activation_Record_Parameter := True;
       end if;
 

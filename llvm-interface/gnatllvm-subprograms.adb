@@ -741,7 +741,8 @@ package body GNATLLVM.Subprograms is
       Foreign         : constant Boolean     := Has_Foreign_Convention (E);
       Adds_S_Link     : constant Boolean     :=
         (Is_Type (E) and then not Foreign)
-        or else (not Has_S_Link and then Force_Activation_Record_Parameter
+        or else (not Has_S_Link
+                   and then Uses_Explicit_Activation_Record_Parameter
                    and then not Foreign);
       Ret_Typ         : MD_Type               :=
         (if    RK in None | Return_By_Parameter then Void_Ty
@@ -1877,7 +1878,7 @@ package body GNATLLVM.Subprograms is
       then
          S_Link := Pointer_Cast (Get_Static_Link (Proc),
                                  Full_GL_Type (Extra_Formals (Proc)));
-      elsif Force_Activation_Record_Parameter then
+      elsif Uses_Explicit_Activation_Record_Parameter then
          S_Link := Get_Undef (A_Char_GL_Type);
       end if;
 
@@ -2162,8 +2163,9 @@ package body GNATLLVM.Subprograms is
         Has_Activation_Record (Subp_Typ);
       This_Adds_S_Link : constant Boolean      :=
         (not Direct_Call and not Foreign)
-        or else (not Has_S_Link and then Force_Activation_Record_Parameter
-                 and then not Foreign);
+        or else (not Has_S_Link
+                   and then Uses_Explicit_Activation_Record_Parameter
+                   and then not Foreign);
       Arg_Count        : constant Nat          :=
         Orig_Arg_Count + (if This_Adds_S_Link then 1 else 0) +
           (if RK = Return_By_Parameter then 1 else 0);
@@ -2954,7 +2956,7 @@ package body GNATLLVM.Subprograms is
                   Add_Readonly_Attribute        (LLVM_Func, Param_Num);
 
                   if not Restrictions_On_Target.Set (No_Implicit_Dynamic_Code)
-                    and then not Force_Activation_Record_Parameter
+                    and then Can_Use_Nest_Attribute
                   then
                      Add_Nest_Attribute         (LLVM_Func, Param_Num);
                   end if;

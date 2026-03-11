@@ -42,9 +42,37 @@ lib/gnat-llvm/wasm32/rts-wasm/
 This allows `--RTS=<runtime-root>` to carry both the Ada runtime files and the
 backend target metadata.
 
+On the frontend side, the current behavior is:
+
+- the host native runtime is found automatically when installed in the default
+  structured location
+- alternate target runtimes still require an explicit `--RTS=<runtime-root>`
+
+Automatic target-based runtime selection for non-host targets is not
+implemented. Doing that would require GCC Ada frontend changes, because
+`gnat-llvm` only follows the runtime the frontend has already selected.
+
+The native runtime packaging and build changes described here are contained in
+the `gnat-llvm` tree itself. They do not require local GCC source changes.
+
 ## Current Verified Runtime
 
-The currently verified packaged runtime is:
+The currently verified packaged runtimes are:
+
+```text
+lib/gnat-llvm/x86_64-pc-linux-gnu/rts-native/
+lib/gnat-llvm/wasm32/rts-wasm/
+```
+
+The host native runtime has been validated without `--RTS`:
+
+```bash
+PATH=$PWD/bin:$PATH \
+  llvm-gnatmake /tmp/gnatllvm-native-smoke/hello.adb
+```
+
+The packaged WebAssembly runtime has been validated with an explicit
+`--RTS=`:
 
 ```text
 lib/gnat-llvm/wasm32/rts-wasm/
