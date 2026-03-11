@@ -28,6 +28,7 @@ with LLVM.Target; use LLVM.Target;
 
 with GNATLLVM;         use GNATLLVM;
 with GNATLLVM.Codegen; use GNATLLVM.Codegen;
+with Opt;              use Opt;
 
 with System.OS_Lib; use System.OS_Lib;
 
@@ -285,6 +286,18 @@ package body Get_Targ is
       function Get_Target_File (Dir : String) return String_Ptr;
       --  Return Dir & "target.atp" if found, null otherwise
 
+      function Get_Target_File_Override (Path : String) return String_Ptr;
+      --  Return a target.atp path from an explicit override. Path may name
+      --  either a file or a directory containing target.atp.
+
+      function Parent_Directory (Path : String) return String;
+      --  Return the parent directory of Path, normalized to end with a
+      --  directory separator. Return the empty string if Path has no parent.
+
+      function Is_Dir_Sep (C : Character) return Boolean is
+        (C = Directory_Separator or else C = '/');
+      --  Return True when C is accepted as a directory separator.
+
       ---------------
       -- Exec_Name --
       ---------------
@@ -311,7 +324,12 @@ package body Get_Targ is
       ---------------------
 
       function Get_Target_File (Dir : String) return String_Ptr is
-         F : constant String := Dir & "target.atp";
+         Prefix : constant String :=
+           (if Dir'Length = 0
+             or else Is_Dir_Sep (Dir (Dir'Last))
+            then Dir
+            else Dir & Directory_Separator);
+         F : constant String := Prefix & "target.atp";
       begin
          if Is_Regular_File (F) then
             return new String'(F);
@@ -320,7 +338,39 @@ package body Get_Targ is
          end if;
       end Get_Target_File;
 
+      ----------------------
+      -- Parent_Directory --
+      ----------------------
+
+      function Parent_Directory (Path : String) return String is
+         Dir : constant String := Dir_Name (Path);
+      begin
+         if Dir'Length = 0 then
+            return "";
+         elsif Is_Dir_Sep (Dir (Dir'Last)) then
+            return Dir;
+         else
+            return Dir & Directory_Separator;
+         end if;
+      end Parent_Directory;
+
+      ------------------------------
+      -- Get_Target_File_Override --
+      ------------------------------
+
+      function Get_Target_File_Override (Path : String) return String_Ptr is
+      begin
+         if Is_Regular_File (Path) then
+            return new String'(Path);
+         elsif Is_Directory (Path) then
+            return Get_Target_File (Path);
+         else
+            return null;
+         end if;
+      end Get_Target_File_Override;
+
       Exec : constant String := Exec_Name;
+      ATP  : String_Ptr;
 
    --  Start of processing for Get_Back_End_Config_File
 
@@ -329,6 +379,33 @@ package body Get_Targ is
       --  the command line. Then return the filename.
 
       Initialize_GNAT_LLVM;
+
+      declare
+         Target_ATP_Override : constant System.OS_Lib.String_Access :=
+           Getenv ("GNATLLVM_TARGET_ATP");
+      begin
+         if Target_ATP_Override /= null then
+            ATP := Get_Target_File_Override (Target_ATP_Override.all);
+            if ATP /= null then
+               return ATP;
+            end if;
+         end if;
+      end;
+
+      if RTS_Lib_Path_Name /= null then
+         ATP := Get_Target_File (Parent_Directory (RTS_Lib_Path_Name.all));
+         if ATP /= null then
+            return ATP;
+         end if;
+      end if;
+
+      if RTS_Src_Path_Name /= null then
+         ATP := Get_Target_File (Parent_Directory (RTS_Src_Path_Name.all));
+         if ATP /= null then
+            return ATP;
+         end if;
+      end if;
+
       if Is_Absolute_Path (Exec) then
          return Get_Target_File (Dir_Name (Exec));
       else
