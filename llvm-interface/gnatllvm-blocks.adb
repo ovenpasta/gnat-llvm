@@ -459,6 +459,16 @@ package body GNATLLVM.Blocks is
                  Pointer_Cast (Get_Static_Link (End_Subp),
                                Full_GL_Type (Extra_Formals (End_Subp)));
             end if;
+
+         elsif Force_Activation_Record_Parameter
+           and then not Has_Foreign_Convention (End_Subp)
+         then
+            --  On targets like WebAssembly that require strict parameter
+            --  agreement between calls and declarations, every non-foreign
+            --  subprogram gets an activation record parameter even if it
+            --  has no uplevel references. Pass a dummy value.
+
+            End_Parameter := Const_Null (A_Char_GL_Type);
          end if;
       end if;
 
