@@ -31,7 +31,7 @@ gnat-llvm/
     rts-sources/            # Additional RTS sources (math, memory, etc.)
     bb-runtimes/            # Bare-board runtimes (math sources originate here)
     Makefile                # Main Makefile (compiler + native RTS)
-    Makefile.target         # WASM target RTS build rules
+    Makefile.target         # Tracked stub replaced for the AdaWebPack WASM flow
     bin/                    # Built compiler tools (llvm-gcc, llvm-gnat, etc.)
     lib/gnat-llvm/wasm32/rts-wasm/  # WASM RTS output directory
       target.atp            # Target parameters consumed through --RTS=
@@ -92,6 +92,18 @@ make build-opt CLANG_LINK_LIB=clang-cpp
 
 The default remains `CLANG_LINK_LIB=clangBasic` for compatibility with the
 older split-library setup.
+
+## Step 3: Replace `Makefile.target` for the AdaWebPack WASM Runtime
+
+The `gnat-llvm` tree ships a tracked `Makefile.target` stub for other build
+flows. For the AdaWebPack WASM runtime workflow, replace it with the runtime
+fragment from `adawebpack_src`:
+
+```bash
+cd gnat-llvm/llvm-interface
+mv Makefile.target Makefile.target.orig
+ln -s adawebpack_src/source/rtl/Makefile.target Makefile.target
+```
 
 The build compiles the Ada frontend (from `gnat_src`) against the LLVM
 backend. It produces:
