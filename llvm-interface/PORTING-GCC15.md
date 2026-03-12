@@ -27,6 +27,9 @@ WebAssembly work:
 - `get_targ.adb`
   Look up `target.atp` from the selected runtime before falling back to the
   compiler executable directory.
+- `patches/gcc-15-repinfo-accessors.patch`
+  Small GCC-side `Repinfo` accessor patch required by
+  `gnatllvm-records-debug.adb` when building against upstream GCC 15.
 - `gnatllvm-blocks.adb`
   WebAssembly-target conditional activation-record parameter fix for
   `__finalizer`.
