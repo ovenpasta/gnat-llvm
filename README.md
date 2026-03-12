@@ -29,6 +29,10 @@ To build GNAT LLVM from sources, follow these steps:
 
       git clone https://github.com/gcc-mirror/gcc.git llvm-interface/gcc
 
+  GNAT-LLVM currently needs a small GCC 15 `Repinfo` accessor patch. Apply:
+
+      git -C llvm-interface/gcc apply ../patches/gcc-15-repinfo-accessors.patch
+
   then under non Windows systems:
 
       ln -s gcc/gcc/ada llvm-interface/gnat_src

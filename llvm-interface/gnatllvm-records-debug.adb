@@ -227,26 +227,55 @@ package body GNATLLVM.Records.Debug is
       procedure Unop         (Code : TCode; Op : Node_Ref_Or_Val);
       procedure Binop
         (Code : TCode; LHS : Node_Ref_Or_Val; RHS : Node_Ref_Or_Val);
-      procedure Cond_Expr
+      procedure Convert_Cond_Expr
         (Test : Node_Ref_Or_Val; LHS : Node_Ref_Or_Val; RHS : Node_Ref_Or_Val);
       procedure Const        (Val : Node_Ref_Or_Val);
       procedure Discriminant (Val : Node_Ref_Or_Val);
       procedure Variable     (Val : Node_Ref_Or_Val);
+      procedure Convert_It (Val : Node_Ref_Or_Val);
+      --  Expression conversion via the Repinfo node accessor API. The
+      --  approach taken when generating a DWARF expression is that each
+      --  visited operation leaves a single new element on the top of the
+      --  stack. That is, a callback can visit its operands and then emit code
+      --  that assumes that the needed values are on the stack in the
+      --  emission order. Conversion failures are handled by setting
+      --  Could_Not_Convert; in this case code may still be emitted to
+      --  Expression for convenience, but at the end it should be assumed to
+      --  be garbage.
 
-      procedure Convert_It is new Visit (Visit_Unop         => Unop,
-                                         Visit_Binop        => Binop,
-                                         Visit_Cond_Expr    => Cond_Expr,
-                                         Visit_Constant     => Const,
-                                         Visit_Discriminant => Discriminant,
-                                         Visit_Variable     => Variable);
-      --  Expression conversion via the visitor API.  The approach taken
-      --  when generating a DWARF expression is that each visited operation
-      --  leaves a single new element on the top of the stack.  That is, a
-      --  callback can visit its operands and then emit code that assumes
-      --  that the needed values are on the stack in the emission order.
-      --  Conversion failures are handled by setting Could_Not_Convert; in
-      --  this case code may still be emitted to Expression for
-      --  convenience, but at the end it should be assumed to be garbage.
+      ----------------
+      -- Convert_It --
+      ----------------
+
+      procedure Convert_It (Val : Node_Ref_Or_Val) is
+         Code : TCode;
+      begin
+         if not Is_Node (Val) then
+            Const (Val);
+            return;
+         end if;
+
+         Code := Get_Node_Code (Val);
+
+         case Code is
+            when Cond_Expr =>
+               Convert_Cond_Expr (Get_Node_Op1 (Val),
+                                  Get_Node_Op2 (Val),
+                                  Get_Node_Op3 (Val));
+
+            when Negate_Expr | Abs_Expr | Truth_Not_Expr =>
+               Unop (Code, Get_Node_Op1 (Val));
+
+            when Discrim_Val =>
+               Discriminant (Get_Node_Op1 (Val));
+
+            when Dynamic_Val =>
+               Variable (Get_Node_Op1 (Val));
+
+            when others =>
+               Binop (Code, Get_Node_Op1 (Val), Get_Node_Op2 (Val));
+         end case;
+      end Convert_It;
 
       ----------
       -- Unop --
@@ -408,10 +437,10 @@ package body GNATLLVM.Records.Debug is
       end Binop;
 
       ---------------
-      -- Cond_Expr --
+      -- Convert_Cond_Expr --
       ---------------
 
-      procedure Cond_Expr
+      procedure Convert_Cond_Expr
         (Test : Node_Ref_Or_Val; LHS, RHS : Node_Ref_Or_Val) is
       begin
 
@@ -454,7 +483,7 @@ package body GNATLLVM.Records.Debug is
          --  Stack: [M&L] [~M&R]
 
          Expression.Append (DW_OP_or);
-      end Cond_Expr;
+      end Convert_Cond_Expr;
 
       -----------
       -- Const --

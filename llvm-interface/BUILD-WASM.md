@@ -50,8 +50,13 @@ extract the GCC 15 source tree and create the required symlink:
 cd gnat-llvm/llvm-interface
 # If not already present:
 # git clone -b releases/gcc-15 https://gcc.gnu.org/git/gcc.git gcc
+git -C gcc apply ../patches/gcc-15-repinfo-accessors.patch
 ln -sf gcc/gcc/ada gnat_src
 ```
+
+The patch adds a small `Repinfo` accessor API used by
+`gnatllvm-records-debug.adb`. It is currently required when building
+GNAT-LLVM against upstream GCC 15 sources.
 
 ## Step 2: Build the GNAT-LLVM Compiler
 
