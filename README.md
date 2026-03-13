@@ -91,6 +91,18 @@ To build GNAT LLVM from sources, follow these steps:
 
       LD_LIBRARY_PATH=/usr/lib make
 
+  If you build with an Alire-provided GNAT toolchain, remember that
+  `llvm-interface/default.cgpr` can lock in whatever Ada/C/C++ drivers were
+  detected when it was generated. If you need to switch toolchains, remove
+  that file and rebuild.
+
+  On some Linux distributions, Alire's linker selection may fail while
+  linking against the LLVM/Clang static libraries. In that case, force `lld`
+  instead of symlinking `ld`:
+
+      rm -f llvm-interface/default.cgpr
+      make CXXFLAGS=-fuse-ld=lld
+
   This creates a "ready to use" set of directories "bin" and "lib" under
   llvm-interface which you can put in your PATH:
 
