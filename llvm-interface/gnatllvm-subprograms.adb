@@ -539,8 +539,12 @@ package body GNATLLVM.Subprograms is
                                   or else (Is_Elementary_Type (GT)
                                                and then Mech /= By_Reference))
                  then (if   Is_Record_Type (GT)
-                            and then Size <= ULL (Get_Bits_Per_Word)
-                       then In_Value_By_Int else In_Value)
+                       then (if   Is_WebAssembly_Target
+                             then Foreign_By_Ref
+                             elsif Size <= ULL (Get_Bits_Per_Word)
+                             then In_Value_By_Int
+                             else In_Value)
+                       else In_Value)
                  elsif Is_Array_Type (GT) then Foreign_By_Component_Ref
                  else  Foreign_By_Ref);
 

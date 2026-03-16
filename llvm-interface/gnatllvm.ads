@@ -388,7 +388,7 @@ package GNATLLVM is
       Equivalent_Keys => "=");
 
    function Starts_With (Switch, S : String) return Boolean is
-     (Switch'Length > S'Length
+     (Switch'Length >= S'Length
      and then Switch (Switch'First .. Switch'First + S'Length - 1) = S);
    --  Return True if Switch starts with S
 
