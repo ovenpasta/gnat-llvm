@@ -1,3 +1,7 @@
+# Alire workspace stub (enables alr exec for Ada tooling)
+alire.toml
+alire/
+
 # Build/test results directories
 alis.list
 obj
@@ -7,6 +11,10 @@ acats
 fixedbugs
 ccg-tests
 llvm-bindings
+
+# User-created symlink; see BUILD-WASM.md "Replace Makefile.target"
+llvm-interface/Makefile.target
+llvm-interface/Makefile.target.orig
 
 # Code editors artifacts
 .#*

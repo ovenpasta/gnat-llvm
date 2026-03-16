@@ -9,17 +9,58 @@ runtime package.
 
 ## Prerequisites
 
-- **GCC 15** with GNAT (Ada compiler) — used to build the GNAT-LLVM compiler
+- **GCC 15** with GNAT (Ada compiler) - used to build the GNAT-LLVM compiler
   itself and provides the `gnat_src` Ada frontend sources
-- **LLVM/Clang** development libraries and headers (tested with LLVM 19)
-- **gprbuild** — Ada project build tool
-- **gprconfig** — gprbuild toolchain configuration tool
-- **llvm-ranlib** — LLVM archiver (part of the LLVM toolchain)
-- **wasm-ld** — WebAssembly linker (part of the LLVM toolchain)
+- **LLVM 21 / Clang 21** development libraries and headers (21.1.x required;
+  other LLVM versions are **not supported**)
+- **gprbuild** - Ada project build tool
+- **gprconfig** - gprbuild toolchain configuration tool
+- **llvm-ranlib** - LLVM archiver (part of the LLVM toolchain)
+- **wasm-ld** - WebAssembly linker (part of the LLVM toolchain)
 - Standard build tools: `make`, `gcc`, `g++`
 
 Ensure `llvm-config`, `clang`, and the GNAT tools (`gcc`, `gnatmake`,
 `gprbuild`) are all on your `PATH`.
+
+## Toolchain Selection
+
+By default, GNAT-LLVM links against `clangBasic`:
+
+```bash
+make build
+make wasm
+```
+
+If your distro packages Clang as a single `clang-cpp` library instead of the
+older split libraries, use:
+
+```bash
+make build CLANG_LINK_LIB=clang-cpp
+make wasm CLANG_LINK_LIB=clang-cpp
+```
+
+That form follows the default `clang` / `llvm-config` on your `PATH`.
+
+For a pinned LLVM install, prefer the explicit versioned tools. On Arch Linux,
+the verified setup is LLVM 21 with:
+
+```bash
+export PATH=/usr/lib/llvm21/bin:$PATH
+```
+
+and explicit `make` overrides:
+
+```bash
+make build LLVM_CONFIG=llvm-config-21 CLANG_LINK_LIB=':libclang-cpp.so.21.1'
+make wasm LLVM_CONFIG=llvm-config-21 CLANG_LINK_LIB=':libclang-cpp.so.21.1'
+```
+
+If the built tools cannot find the LLVM shared libraries at runtime, set
+`LD_LIBRARY_PATH` explicitly. For the pinned Arch LLVM 21 setup:
+
+```bash
+export LD_LIBRARY_PATH=/usr/lib/llvm21/lib
+```
 
 ## Directory Layout
 
@@ -33,7 +74,9 @@ gnat-llvm/
     Makefile                # Main Makefile (compiler + native RTS)
     Makefile.target         # Tracked stub replaced for the AdaWebPack WASM flow
     bin/                    # Built compiler tools (llvm-gcc, llvm-gnat, etc.)
-    lib/gnat-llvm/wasm32/rts-wasm/  # WASM RTS output directory
+    lib/gnat-llvm/wasm32/
+      rts-wasm/        # TLSF runtime - standalone WASM (make wasm)
+      rts-wasm-emcc/   # Emscripten runtime (make wasm-emcc)
       target.atp            # Target parameters consumed through --RTS=
       ada_source_path       # Default RTS source path file
       ada_object_path       # Default RTS object path file
@@ -76,22 +119,9 @@ make build-opt
 
 ### Arch Linux
 
-Some Arch Linux LLVM/Clang packages expose the needed Clang C++ symbols
-through the monolithic `clang-cpp` library instead of `clangBasic`.
-Use the build variable override in that case:
-
-```bash
-make build CLANG_LINK_LIB=clang-cpp
-```
-
-or:
-
-```bash
-make build-opt CLANG_LINK_LIB=clang-cpp
-```
-
-The default remains `CLANG_LINK_LIB=clangBasic` for compatibility with the
-older split-library setup.
+The LLVM 21 selection described in `Toolchain Selection` was verified from a
+fresh copy of the tree on Arch after installing the full LLVM 21 tool set,
+including `llvm-config-21`.
 
 ## Step 3: Replace `Makefile.target` for the AdaWebPack WASM Runtime
 
@@ -108,9 +138,9 @@ ln -s adawebpack_src/source/rtl/Makefile.target Makefile.target
 The build compiles the Ada frontend (from `gnat_src`) against the LLVM
 backend. It produces:
 
-- `bin/llvm-gcc` — the main compiler driver
-- `bin/llvm-gnat1` — the Ada-to-LLVM code generator
-- `bin/llvm-gnatbind` — the Ada binder
+- `bin/llvm-gcc` - the main compiler driver
+- `bin/llvm-gnat1` - the Ada-to-LLVM code generator
+- `bin/llvm-gnatbind` - the Ada binder
 - Other tools (`llvm-gnatmake`, `llvm-gnatlink`, etc.)
 
 **Note:** If you modify compiler source files (`gnatllvm-*.adb`/`.ads`),
@@ -133,12 +163,6 @@ cd gnat-llvm/llvm-interface
 make wasm
 ```
 
-On Arch Linux, keep the same Clang override used for the compiler build:
-
-```bash
-make wasm CLANG_LINK_LIB=clang-cpp
-```
-
 If the built tools cannot find the LLVM shared libraries at runtime, set
 `LD_LIBRARY_PATH` explicitly when invoking `make`:
 
@@ -146,31 +170,28 @@ If the built tools cannot find the LLVM shared libraries at runtime, set
 LD_LIBRARY_PATH=/usr/lib make wasm
 ```
 
-On Arch Linux this can be combined with the Clang override:
-
-```bash
-LD_LIBRARY_PATH=/usr/lib make wasm CLANG_LINK_LIB=clang-cpp
-```
+For the pinned Arch LLVM 21 setup, use the same `PATH`, `LLVM_CONFIG`, and
+`CLANG_LINK_LIB` selection described in `Toolchain Selection`.
 
 ### What `make wasm` does
 
-1. **Copies sources** — Assembles RTS sources into
+1. **Copies sources** - Assembles RTS sources into
    `lib/gnat-llvm/wasm32/rts-wasm/adainclude/`
    from three locations:
-   - `gnat_src/libgnat/` — upstream GNAT runtime sources
+   - `gnat_src/libgnat/` - upstream GNAT runtime sources
    - the WASM runtime override source tree referenced by `Makefile.target`
-   - `rts-sources/` — math library, memory operations, light runtime pieces
+   - `rts-sources/` - math library, memory operations, light runtime pieces
 
-2. **Compiles spec-only files** — Certain `.ads` files need to be compiled
+2. **Compiles spec-only files** - Certain `.ads` files need to be compiled
    first (the `COMPILABLE_WASM_SPECS` list in `Makefile.target`)
 
-3. **Compiles all bodies** — All `.adb` files in `adainclude/` are compiled
+3. **Compiles all bodies** - All `.adb` files in `adainclude/` are compiled
    with `--target=wasm32`
 
-4. **Archives** — All `.o` files are collected into
+4. **Archives** - All `.o` files are collected into
    `lib/gnat-llvm/wasm32/rts-wasm/adalib/libgnat.a`
 
-5. **Installs runtime metadata** — Places:
+5. **Installs runtime metadata** - Places:
    - `lib/gnat-llvm/wasm32/rts-wasm/target.atp`
    - `lib/gnat-llvm/wasm32/rts-wasm/ada_source_path`
    - `lib/gnat-llvm/wasm32/rts-wasm/ada_object_path`
@@ -275,6 +296,6 @@ warnings. The local copies under `rts-sources/math/` have been fixed to
 
 ## References
 
-- `PORTING-GCC15.md` — GNAT-LLVM compiler-side GCC 15 / WASM notes
-- `SEPARATE-RUNTIMES.md` — Separate runtime packaging and `--RTS=` support
-- `Makefile.target` — WASM RTS build rules and file lists
+- `PORTING-GCC15.md` - GNAT-LLVM compiler-side GCC 15 / WASM notes
+- `SEPARATE-RUNTIMES.md` - Separate runtime packaging and `--RTS=` support
+- `Makefile.target` - WASM RTS build rules and file lists

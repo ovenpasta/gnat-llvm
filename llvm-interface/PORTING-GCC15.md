@@ -26,7 +26,7 @@ WebAssembly work:
   LLVM API/header updates for current LLVM releases.
 - `get_targ.adb`
   Look up `target.atp` from the selected runtime before falling back to the
-  compiler executable directory.
+  compiler executable directory. See `SEPARATE-RUNTIMES.md`.
 - `patches/gcc-15-repinfo-accessors.patch`
   Small GCC-side `Repinfo` accessor patch required by
   `gnatllvm-records-debug.adb` when building against upstream GCC 15.
@@ -38,31 +38,10 @@ WebAssembly work:
 - `gnatllvm-subprograms.adb`
   WebAssembly-target conditional `nest` handling changes on function
   definitions and explicit activation-record ABI shaping.
-
-The compiler-side WebAssembly handling is target-conditional. The currently
-packaged runtime in this workspace is still specifically `wasm32`
-(`lib/gnat-llvm/wasm32/rts-wasm`).
-
-The host native runtime is also packaged in the structured layout and works
-without `--RTS`. Non-host runtimes such as `wasm32` still require explicit
-`--RTS=<runtime-root>`.
-
-## Arch Linux
-
-Some Arch Linux LLVM/Clang packages require the monolithic `clang-cpp`
-library. Use:
-
-```bash
-make build CLANG_LINK_LIB=clang-cpp
-```
-
-If LLVM shared libraries are not found at runtime, add `LD_LIBRARY_PATH`:
-
-```bash
-LD_LIBRARY_PATH=/usr/lib make build CLANG_LINK_LIB=clang-cpp
-```
-
-## Runtime Separation
-
-The compiler-side runtime-separation support is documented in
-`SEPARATE-RUNTIMES.md`.
+  `Get_Param_Kind` now uses `Foreign_By_Ref` (pointer) for
+  `C_Pass_By_Copy` record parameters on wasm32 instead of `In_Value`,
+  fixing the wasm32 C ABI mismatch where Ada was expanding the struct
+  to individual fields instead of passing a pointer.
+  Record return values (`Get_Return_Kind`) do not need a wasm32 fix:
+  LLVM's wasm32 backend maps `{i32, i32}` return type to multivalue
+  return, which matches what Clang generates for the same C struct.

@@ -55,13 +55,14 @@ implemented. Doing that would require GCC Ada frontend changes, because
 The native runtime packaging and build changes described here are contained in
 the `gnat-llvm` tree itself. They do not require local GCC source changes.
 
-## Current Verified Runtime
+## Current Verified Runtimes
 
 The currently verified packaged runtimes are:
 
 ```text
 lib/gnat-llvm/x86_64-pc-linux-gnu/rts-native/
 lib/gnat-llvm/wasm32/rts-wasm/
+lib/gnat-llvm/wasm32/rts-wasm-emcc/
 ```
 
 The host native runtime has been validated without `--RTS`:
@@ -71,21 +72,25 @@ PATH=$PWD/bin:$PATH \
   llvm-gnatmake /tmp/gnatllvm-native-smoke/hello.adb
 ```
 
-The packaged WebAssembly runtime has been validated with an explicit
-`--RTS=`:
+Two WebAssembly runtimes are packaged:
 
-```text
-lib/gnat-llvm/wasm32/rts-wasm/
-```
+- `rts-wasm` - standalone WASM with Ada's built-in TLSF allocator. Ada owns
+  `malloc`/`free`/`realloc`. Good for targets without Emscripten.
+- `rts-wasm-emcc` - delegates all allocation to Emscripten's dlmalloc.
+  Ada does not export `malloc`/`free`. Required when linking with Emscripten
+  to avoid WASM function-table index conflicts.
 
-It has been validated with:
+Both have been validated with:
 
 ```bash
-make wasm CLANG_LINK_LIB=clang-cpp
+make wasm
+make -o build wasm-emcc
 
-PATH=$PWD/bin:$PATH \
-  make -C adawebpack_src build_examples \
-    GPRBUILD_FLAGS="--target=llvm --RTS=$PWD/lib/gnat-llvm/wasm32/rts-wasm"
+PATH=$PWD/bin:$PATH gprbuild --target=llvm \
+  --RTS=$PWD/lib/gnat-llvm/wasm32/rts-wasm -P your_project.gpr
+
+PATH=$PWD/bin:$PATH gprbuild --target=llvm \
+  --RTS=$PWD/lib/gnat-llvm/wasm32/rts-wasm-emcc -P your_project.gpr
 ```
 
 ## Naming Model
