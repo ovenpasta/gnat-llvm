@@ -49,15 +49,19 @@ To build GNAT LLVM from sources, follow these steps:
 
 - Install (and put in your PATH) a recent GNAT.
 
-- Install LLVM and Clang 21.1.x
+- Install **LLVM 21** and **Clang 21** (21.1.x recommended)
 
-  The recommended way to build GNAT LLVM is to use an existing LLVM and Clang
-  package installed via e.g. `brew install llvm` on macOS or your
-  distribution's LLVM/Clang 21 packages. You can also build LLVM yourself with
-  the options that suit your needs. You may want to use the lightly patched
-  version that we maintain at https://github.com/AdaCore/llvm-project. After
-  installing/building, make sure the LLVM bin directory containing
-  `llvm-config` and `clang` is in your `PATH`.
+  GNAT-LLVM requires LLVM 21 specifically - other versions (19, 20, 22, etc.)
+  are **not supported** and will fail to build.
+
+  The recommended way to install is via your distribution's LLVM 21 packages
+  (e.g. `llvm21`, `clang21` on Arch Linux, or `llvm-21-dev`, `libclang-21-dev`
+  on Debian/Ubuntu) or `brew install llvm@21` on macOS. You can also build
+  LLVM 21 yourself with the options that suit your needs. You may want to use
+  the lightly patched version that we maintain at
+  https://github.com/AdaCore/llvm-project. After installing/building, make
+  sure the LLVM 21 bin directory containing `llvm-config` and `clang` is in
+  your `PATH`.
 
   Alternatively, you can invoke make with an environment variable named 
   `LLVM_CONFIG` pointing to your `llvm-config` binary, this way the LLVM you
