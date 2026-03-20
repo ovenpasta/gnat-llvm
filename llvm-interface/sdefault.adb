@@ -39,7 +39,9 @@ package body Sdefault is
    function Include_Dir_Default_Name return String_Ptr is
    begin
       return Relocate_Path ("/PREFIX",
-                            (if CCG then "/PREFIX/lib/rts-ccg/adainclude"
+                            (if CCG then "/PREFIX/lib/gnat-llvm/" &
+                                         Default_Target_Triple &
+                                         "/rts-ccg/adainclude"
                              else "/PREFIX/lib/gnat-llvm/" &
                                   Default_Target_Triple &
                                   "/rts-native/adainclude"));
@@ -52,7 +54,9 @@ package body Sdefault is
    function Object_Dir_Default_Name return String_Ptr is
    begin
       return Relocate_Path ("/PREFIX",
-                            (if CCG then "/PREFIX/lib/rts-ccg/adalib"
+                            (if CCG then "/PREFIX/lib/gnat-llvm/" &
+                                         Default_Target_Triple &
+                                         "/rts-ccg/adalib"
                              else "/PREFIX/lib/gnat-llvm/" &
                                   Default_Target_Triple &
                                   "/rts-native/adalib"));
@@ -65,9 +69,8 @@ package body Sdefault is
    function Search_Dir_Prefix return String_Ptr is
    begin
       return Relocate_Path ("/PREFIX",
-                            (if CCG then "/PREFIX/lib/"
-                             else "/PREFIX/lib/gnat-llvm/" &
-                                  Default_Target_Triple & "//"));
+                            "/PREFIX/lib/gnat-llvm/" &
+                            Default_Target_Triple & "//");
    end Search_Dir_Prefix;
 
    -----------------

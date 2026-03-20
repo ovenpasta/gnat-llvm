@@ -342,8 +342,8 @@ COMMON_ZFP_SRCS= \
 ada.ads a-assert.adb a-assert.ads a-unccon.ads a-uncdea.ads \
 interfac.ads s-stoele.adb s-stoele.ads s-unstyp.ads
 
-ZFPINCLUDE=lib/rts-zfp/adainclude
-ZFPLIB=lib/rts-zfp/adalib
+ZFPINCLUDE=lib/gnat-llvm/$(llvm_target)/rts-zfp/adainclude
+ZFPLIB=lib/gnat-llvm/$(llvm_target)/rts-zfp/adalib
 
 zfp-build:
 	$(RMDIR) $(ZFPINCLUDE) $(ZFPLIB)
@@ -353,7 +353,7 @@ zfp-build:
 	done
 	cp -p zfp/*.* $(ZFPINCLUDE)
 	PATH=$(pwd)/bin:$(clang_path):$$PATH \
-	$(GPRBUILD) -p --target=$(target) --RTS=zfp -j$(PROCS) -P$(ZFPINCLUDE)/zfp \
+	$(GPRBUILD) -p --target=$(target) -j$(PROCS) -P$(ZFPINCLUDE)/zfp \
 	  -XCFLAGS="$(CFLAGS)" \
 	  -XEXTRALIBFLAGS="$(EXTRALIBFLAGS)" \
 	  -XLIBRARY_KIND=$(LIBRARY_KIND) \
