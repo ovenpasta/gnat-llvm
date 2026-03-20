@@ -1,0 +1,81 @@
+diff --git a/gcc/ada/repinfo.adb b/gcc/ada/repinfo.adb
+index aabeda0725b..ad535d4eb57 100644
+--- a/gcc/ada/repinfo.adb
++++ b/gcc/ada/repinfo.adb
+@@ -2632,4 +2632,51 @@ package body Repinfo is
+       end if;
+    end Write_Val;
+ 
++   -------------
++   -- Is_Node --
++   -------------
++
++   function Is_Node (Val : Node_Ref_Or_Val) return Boolean is
++     (Val < Uint_0);
++
++   -------------------
++   -- Get_Node_Code --
++   -------------------
++
++   function Get_Node_Code (Val : Node_Ref_Or_Val) return TCode is
++      Node : Exp_Node renames Rep_Table.Table (-UI_To_Int (Val));
++   begin
++      return Node.Expr;
++   end Get_Node_Code;
++
++   ------------------
++   -- Get_Node_Op1 --
++   ------------------
++
++   function Get_Node_Op1 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val is
++      Node : Exp_Node renames Rep_Table.Table (-UI_To_Int (Val));
++   begin
++      return Node.Op1;
++   end Get_Node_Op1;
++
++   ------------------
++   -- Get_Node_Op2 --
++   ------------------
++
++   function Get_Node_Op2 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val is
++      Node : Exp_Node renames Rep_Table.Table (-UI_To_Int (Val));
++   begin
++      return Node.Op2;
++   end Get_Node_Op2;
++
++   ------------------
++   -- Get_Node_Op3 --
++   ------------------
++
++   function Get_Node_Op3 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val is
++      Node : Exp_Node renames Rep_Table.Table (-UI_To_Int (Val));
++   begin
++      return Node.Op3;
++   end Get_Node_Op3;
++
+ end Repinfo;
+diff --git a/gcc/ada/repinfo.ads b/gcc/ada/repinfo.ads
+index 6a05f43a5af..75e2e1c67f9 100644
+--- a/gcc/ada/repinfo.ads
++++ b/gcc/ada/repinfo.ads
+@@ -418,4 +418,20 @@ package Repinfo is
+    --  layout mode, then the name of the entity for the size (either
+    --  a function of a variable) is listed followed by a line return.
+ 
++   function Is_Node (Val : Node_Ref_Or_Val) return Boolean;
++   pragma Inline (Is_Node);
++   --  Return True iff Val denotes a stored expression node.
++
++   function Get_Node_Code (Val : Node_Ref_Or_Val) return TCode;
++   --  Return the tree code for a stored expression node.
++
++   function Get_Node_Op1 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val;
++   --  Return the first operand for a stored expression node.
++
++   function Get_Node_Op2 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val;
++   --  Return the second operand for a stored expression node.
++
++   function Get_Node_Op3 (Val : Node_Ref_Or_Val) return Node_Ref_Or_Val;
++   --  Return the third operand for a stored expression node.
++
+ end Repinfo;
