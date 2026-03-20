@@ -126,6 +126,45 @@ Additional docs
 - Separate runtime packaging support: [llvm-interface/SEPARATE-RUNTIMES.md](llvm-interface/SEPARATE-RUNTIMES.md)
 - WebAssembly runtime build workflow: [llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md)
 
+Targets and Runtimes
+--------------------
+
+GNAT-LLVM supports several targets and runtime configurations.
+All runtimes are installed under `llvm-interface/` after building.
+
+| Target              | Make command                    | Output path                                  |
+|---------------------|---------------------------------|----------------------------------------------|
+| Native              | `make`                          | `lib/gnat-llvm/<triple>/rts-native/`         |
+| ZFP                 | `make zfp`                      | `lib/gnat-llvm/<triple>/rts-zfp/`            |
+| WASM standalone     | `make wasm`                     | `lib/gnat-llvm/wasm32/rts-wasm/`             |
+| WASM Emscripten     | `make wasm-emcc`                | `lib/gnat-llvm/wasm32/rts-wasm-emcc/`        |
+| CCG                 | `make ccg`                      | `lib/gnat-llvm/<triple>/rts-ccg/`            |
+| LLVM bitcode        | `make gnatlib-bc`               | `.bc` files alongside native `adalib/`       |
+| SymCC               | `make gnatlib-symcc-automated`  | `lib/gnat-llvm/<triple>/rts-native/`         |
+
+**Native** is built by default and is auto-detected by the compiler.
+
+**ZFP** (Zero Footprint Profile) targets bare-metal environments with no OS
+support, tasking, or exceptions.
+
+**WASM** builds require AdaWebPack (https://github.com/ovenpasta/adawebpack,
+branch `gcc-15-wasm-rts`), a separate repository checked out as
+`llvm-interface/adawebpack_src/`. Two runtimes are provided: standalone TLSF
+(`rts-wasm`) and Emscripten-delegating (`rts-wasm-emcc`). Select a runtime
+with `--RTS=`; see [llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md)
+for details.
+
+**CCG** (C Code Generator) translates Ada to C via LLVM IR. Activate with
+the `CCG=1` environment variable, or name the compiler binary `c-*` (e.g.
+`c-llvm-gnat1`). On success, produces a `.c` file instead of a `.o` file.
+The `rts-ccg` runtime is a copy of `rts-native` compiled for CCG use.
+
+**gnatlib-bc** builds the native runtime as LLVM bitcode, useful for
+link-time optimization and program analysis.
+
+**SymCC** builds the native runtime instrumented for symbolic execution.
+Requires `libsymcc` from the SymCC project.
+
 Usage
 -----
 
@@ -156,6 +195,10 @@ Usage
 - To generate native assembly file (will generate a .s file):
 
       llvm-gcc -S file.adb
+
+- To generate C code via CCG (will produce a .c file):
+
+      CCG=1 llvm-gcc -c file.adb
 
 License
 -------
