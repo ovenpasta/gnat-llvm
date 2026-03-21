@@ -148,7 +148,7 @@ All runtimes are installed under `llvm-interface/` after building.
 support, tasking, or exceptions.
 
 **WASM** builds require AdaWebPack (https://github.com/ovenpasta/adawebpack,
-branch `gcc-15-wasm-rts`), a separate repository checked out as
+branch `gcc-16-wasm-rts`), a separate repository checked out as
 `llvm-interface/adawebpack_src/`. Two runtimes are provided: standalone TLSF
 (`rts-wasm`) and Emscripten-delegating (`rts-wasm-emcc`). Select a runtime
 with `--RTS=`; see [llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md)

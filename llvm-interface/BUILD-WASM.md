@@ -9,7 +9,7 @@ runtime package.
 
 ## Prerequisites
 
-- **GCC 15** with GNAT (Ada compiler) - used to build the GNAT-LLVM compiler
+- **GCC 16** with GNAT (Ada compiler) - used to build the GNAT-LLVM compiler
   itself and provides the `gnat_src` Ada frontend sources
 - **LLVM 21 / Clang 21** development libraries and headers (21.1.x required;
   other LLVM versions are **not supported**)
@@ -67,7 +67,7 @@ export LD_LIBRARY_PATH=/usr/lib/llvm21/lib
 ```
 gnat-llvm/
   llvm-interface/           # Main working directory
-    gcc/                    # GCC 15 source tree (contains gcc/ada = GNAT frontend)
+    gcc/                    # GCC 16 source tree (contains gcc/ada = GNAT frontend)
     gnat_src -> gcc/gcc/ada # Symlink to GNAT frontend sources
     rts-sources/            # Additional RTS sources (math, memory, etc.)
     bb-runtimes/            # Bare-board runtimes (math sources originate here)
@@ -86,20 +86,20 @@ gnat-llvm/
 
 ## Step 1: Set Up GCC Sources
 
-The GNAT-LLVM compiler uses the GCC 15 Ada frontend sources. Clone or
-extract the GCC 15 source tree and create the required symlink:
+The GNAT-LLVM compiler uses the GCC 16 Ada frontend sources. Clone or
+extract the GCC 16 source tree and create the required symlink:
 
 ```bash
 cd gnat-llvm/llvm-interface
 # If not already present:
-# git clone -b releases/gcc-15 https://gcc.gnu.org/git/gcc.git gcc
-git -C gcc apply ../patches/gcc-15-repinfo-accessors.patch
+# git clone https://gcc.gnu.org/git/gcc.git gcc
+git -C gcc apply ../patches/gcc-16-repinfo-accessors.patch
 ln -sf gcc/gcc/ada gnat_src
 ```
 
 The patch adds a small `Repinfo` accessor API used by
 `gnatllvm-records-debug.adb`. It is currently required when building
-GNAT-LLVM against upstream GCC 15 sources.
+GNAT-LLVM against upstream GCC 16 sources.
 
 ## Step 2: Build the GNAT-LLVM Compiler
 
@@ -270,7 +270,7 @@ gprbuild -f -Pgnat_llvm -j0 ...
 
 This is a known GNAT-LLVM compiler bug triggered by `Big_Integers_Ghost`
 ghost generics. The affected files have been removed from the WASM RTS build.
-See `PORTING-GCC15.md` for details.
+See `PORTING-GCC16.md` for details.
 
 ### `WebAssembly hasn't implemented nest arguments`
 
@@ -278,7 +278,7 @@ This error occurs if the `nest` attribute fix has not been applied to
 `gnatllvm-instructions.adb` and `gnatllvm-subprograms.adb`. The LLVM `nest`
 attribute requires trampoline support, which WASM lacks. The fix skips the
 attribute when explicit activation-record parameter handling is in use for
-the active WebAssembly target. See `PORTING-GCC15.md` for the specific
+the active WebAssembly target. See `PORTING-GCC16.md` for the specific
 changes.
 
 ### `Incorrect number of arguments passed to called function` for `__finalizer`
@@ -286,16 +286,16 @@ changes.
 This error occurs if the `Push_Block` fix has not been applied to
 `gnatllvm-blocks.adb`. On WASM, every non-foreign function gets an activation
 record parameter, but `Push_Block` was not passing one for `__finalizer`
-procedures without uplevel references. See `PORTING-GCC15.md` for details.
+procedures without uplevel references. See `PORTING-GCC16.md` for details.
 
 ### Style errors (`-gnatyz`) in math sources
 
-GCC 15 math sources use `abs (X)` which triggers redundant parentheses
-warnings. The local copies under `rts-sources/math/` have been fixed to
+Math sources from `rts-sources/math/` use `abs (X)` which triggers redundant
+parentheses warnings under `-gnatyz`. The local copies have been fixed to
 `abs X`. If you update from upstream, reapply these fixes.
 
 ## References
 
-- `PORTING-GCC15.md` - GNAT-LLVM compiler-side GCC 15 / WASM notes
+- `PORTING-GCC16.md` - GNAT-LLVM compiler-side GCC 16 porting notes
 - `SEPARATE-RUNTIMES.md` - Separate runtime packaging and `--RTS=` support
 - `Makefile.target` - WASM RTS build rules and file lists
