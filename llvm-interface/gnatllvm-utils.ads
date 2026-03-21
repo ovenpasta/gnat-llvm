@@ -186,18 +186,6 @@ package GNATLLVM.Utils is
    --  specially for Is_Return_Object so the return statement need not
    --  do further allocation.
 
-   pragma Warnings (Off);
-   function Is_Link_Once (Id : Entity_Id) return Boolean is (False);
-   pragma Warnings (On);
-   --  Stub: Is_Link_Once is a GNAT frontend flag not yet present in this
-   --  version of gnat_src. Always return False until gnat_src is updated.
-
-   function Unique_Component_Name (E : Entity_Id) return Name_Id is
-     (Chars (E));
-   --  Stub: Unique_Component_Name is a GNAT frontend function not yet
-   --  present in this version of gnat_src. Fall back to Chars.
-   --  Only used in Emit_C mode which is not exercised here.
-
    function Is_Generic_Item (N : Node_Id) return Boolean is
      (Nkind (N) in N_Subprogram_Body | N_Function_Specification |
                      N_Procedure_Specification | N_Package_Specification |
