@@ -43,6 +43,14 @@ LLVM_VERSION=$(shell $(LLVM_CONFIG) --version | cut -d. -f1)
 
 CLANG_LINK_LIB ?= clangBasic
 
+GCC_BASE_VER := $(shell cat gcc/gcc/BASE-VER 2>/dev/null || echo unknown)
+GCC_DEV_PHASE := $(shell cat gcc/gcc/DEV-PHASE 2>/dev/null)
+ifeq ($(GCC_DEV_PHASE),)
+  GNAT_VERSION_STRING := $(GCC_BASE_VER)
+else
+  GNAT_VERSION_STRING := $(GCC_BASE_VER) ($(GCC_DEV_PHASE))
+endif
+
 GPRBUILD=gprbuild -v -n -XLLVM_Version=$(LLVM_VERSION) -XClang_Link_Lib=$(CLANG_LINK_LIB) -x
 
 ifeq ($(OS),Windows_NT)
@@ -100,17 +108,20 @@ setup:
 
 build: setup force
 	$(GPRBUILD) -Pgnat_llvm -j$(PROCS) \
-	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS)
+	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS) \
+	  -cargs:c -DGNAT_VERSION_STRING='"$(GNAT_VERSION_STRING)"' -margs
 	$(GPRBUILD) -Ptools -j$(PROCS)
 
 build-uninit: setup force
 	$(GPRBUILD) -XBuild=Uninitialized -Pgnat_llvm -j$(PROCS) \
-	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS)
+	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS) \
+	  -cargs:c -DGNAT_VERSION_STRING='"$(GNAT_VERSION_STRING)"' -margs
 	$(GPRBUILD) -Ptools -j$(PROCS)
 
 build-opt: setup force
 	$(GPRBUILD) $(GPROPT) -Pgnat_llvm -j$(PROCS) \
-	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS)
+	  -largs $(LDFLAGS) -cargs:c++ $(ALL_CXXFLAGS) \
+	  -cargs:c -DGNAT_VERSION_STRING='"$(GNAT_VERSION_STRING)"' -margs
 	$(GPRBUILD) $(GPROPT) -Ptools -j$(PROCS)
 
 # Target for building with coverage instrumentation.

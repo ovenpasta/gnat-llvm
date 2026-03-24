@@ -57,6 +57,11 @@ update_path (char *path, char *key)
   return path;
 }
 
-/* Originally defined in version.c */
-const char gnat_version_string[] = "1.0";
+/* Originally defined in version.c.
+   GNAT_VERSION_STRING is injected at build time by the Makefile from
+   gcc/BASE-VER and gcc/DEV-PHASE.  Fall back to "unknown" if not set. */
+#ifndef GNAT_VERSION_STRING
+# define GNAT_VERSION_STRING "unknown"
+#endif
+const char gnat_version_string[] = GNAT_VERSION_STRING;
 
