@@ -2076,9 +2076,16 @@ package body GNATLLVM.Subprograms is
                   if Has_Foreign_Convention (Ref_GT)
                     or else not Can_Use_Internal_Rep (Ref_GT)
                   then
-                     return (if   Has_Activation_Record (E)
-                             then Make_Trampoline (DT, V, S_Link, E)
-                             else G_Is_Relationship (V, DT, Trampoline));
+                     --  On targets where every subprogram already carries
+                     --  an explicit activation-record parameter (WebAssembly),
+                     --  the nested subprogram's AREC slot is already part of
+                     --  its LLVM parameter list, so no trampoline is needed.
+                     return
+                       (if   Has_Activation_Record (E)
+                             and then
+                             not Uses_Explicit_Activation_Record_Parameter
+                        then Make_Trampoline (DT, V, S_Link, E)
+                        else G_Is_Relationship (V, DT, Trampoline));
                   else
                      return Insert_Value
                        (Insert_Value (Get_Undef_Relationship
@@ -2088,8 +2095,11 @@ package body GNATLLVM.Subprograms is
                   end if;
                end;
             elsif Attr = Attribute_Address then
-               return (if   Has_Activation_Record (E)
-                       then Make_Trampoline (GT, V, S_Link, E) else V);
+               return
+                 (if   Has_Activation_Record (E)
+                       and then
+                       not Uses_Explicit_Activation_Record_Parameter
+                  then Make_Trampoline (GT, V, S_Link, E) else V);
             end if;
          end;
       end if;
