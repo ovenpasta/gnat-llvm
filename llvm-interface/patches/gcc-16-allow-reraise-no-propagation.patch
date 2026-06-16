@@ -1,0 +1,36 @@
+diff --git a/gcc/ada/sem_ch11.adb b/gcc/ada/sem_ch11.adb
+index 0c89c92f77b..60bfff6eb79 100644
+--- a/gcc/ada/sem_ch11.adb
++++ b/gcc/ada/sem_ch11.adb
+@@ -47,6 +47,7 @@ with Sem_Warn;       use Sem_Warn;
+ with Sinfo.Nodes;    use Sinfo.Nodes;
+ with Sinfo.Utils;    use Sinfo.Utils;
+ with Stand;          use Stand;
++with Tbuild;         use Tbuild;
+ with Warnsw;         use Warnsw;
+ 
+ package body Sem_Ch11 is
+@@ -601,6 +602,23 @@ package body Sem_Ch11 is
+             Error_Msg_N
+               ("reraise statement must appear directly in a handler", N);
+ 
++         --  On targets with no exception propagation runtime (such as
++         --  WebAssembly under GNAT-LLVM: no DWARF unwinder, no SJLJ) a
++         --  bare reraise has no valid lowering and would otherwise be
++         --  rejected under the No_Exception_Propagation restriction.
++         --  Rewrite it as an explicit Program_Error raise, which lowers
++         --  like any other raise on these targets and ultimately reaches
++         --  the last-chance handler. Unlike a genuine reraise we do not
++         --  set Local_Raise_Not_OK, so the enclosing handler stays a valid
++         --  local-raise target and its cleanup code still runs.
++
++         elsif Restriction_Active (No_Exception_Propagation) then
++            Rewrite (N,
++              Make_Raise_Program_Error (Sloc (N),
++                Reason => PE_Explicit_Raise));
++            Analyze (N);
++            return;
++
+          --  If a handler has a reraise, it cannot be the target of a local
+          --  raise (goto optimization is impossible), and if the no exception
+          --  propagation restriction is set, this is a violation.

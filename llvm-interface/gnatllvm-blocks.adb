@@ -160,7 +160,7 @@ package body GNATLLVM.Blocks is
    --  associated with the actions for that exception.
 
    package Constraint_Error_Stack is new Table.Table
-     (Table_Component_Type => E_Label_Id,
+     (Table_Component_Type => Opt_E_Label_Id,
       Table_Index_Type     => Nat,
       Table_Low_Bound      => 1,
       Table_Initial        => 5,
@@ -169,7 +169,7 @@ package body GNATLLVM.Blocks is
    --  Stack of labels for constraint error
 
    package Storage_Error_Stack is new Table.Table
-     (Table_Component_Type => E_Label_Id,
+     (Table_Component_Type => Opt_E_Label_Id,
       Table_Index_Type     => Nat,
       Table_Low_Bound      => 1,
       Table_Initial        => 5,
@@ -178,7 +178,7 @@ package body GNATLLVM.Blocks is
    --  Stack of labels for storage error
 
    package Program_Error_Stack is new Table.Table
-     (Table_Component_Type => E_Label_Id,
+     (Table_Component_Type => Opt_E_Label_Id,
       Table_Index_Type     => Nat,
       Table_Low_Bound      => 1,
       Table_Initial        => 5,
@@ -1541,16 +1541,21 @@ package body GNATLLVM.Blocks is
    --------------------------------------
 
    procedure Process_Push_Pop_xxx_Error_Label (N : N_Push_Pop_xxx_Label_Id) is
-      procedure Maybe_Warn (E : E_Label_Id);
-      --  Warn if we haven't generated a branch to E
+      procedure Maybe_Warn (E : Opt_E_Label_Id);
+      --  Warn if we haven't generated a branch to E. E may be Empty: under
+      --  the No_Exception_Propagation local-handler model the front end emits
+      --  Push/Pop nodes with a null Exception_Label for handlers that cannot
+      --  be a local-goto target (e.g. a rewritten bare reraise), in which
+      --  case there is nothing to warn about.
 
       ----------------
       -- Maybe_Warn --
       ----------------
 
-      procedure Maybe_Warn (E : E_Label_Id) is
+      procedure Maybe_Warn (E : Opt_E_Label_Id) is
       begin
-         if No (Get_Label_Info (E))
+         if Present (E)
+           and then No (Get_Label_Info (E))
            and then No_Exception_Propagation_Active
          then
             Warn_If_No_Local_Raise (E);
