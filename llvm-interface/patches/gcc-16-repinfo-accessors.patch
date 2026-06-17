@@ -1,5 +1,5 @@
 diff --git a/gcc/ada/repinfo.adb b/gcc/ada/repinfo.adb
-index aabeda0725b..ad535d4eb57 100644
+index aabeda0725b..a9dbd594532 100644
 --- a/gcc/ada/repinfo.adb
 +++ b/gcc/ada/repinfo.adb
 @@ -2632,4 +2632,51 @@ package body Repinfo is
@@ -11,7 +11,7 @@ index aabeda0725b..ad535d4eb57 100644
 +   -------------
 +
 +   function Is_Node (Val : Node_Ref_Or_Val) return Boolean is
-+     (Val < Uint_0);
++     (Present (Val) and then Val < Uint_0);
 +
 +   -------------------
 +   -- Get_Node_Code --
