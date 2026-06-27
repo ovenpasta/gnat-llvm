@@ -1468,8 +1468,27 @@ package body GNATLLVM.Arrays is
       --  Handle the case of a simple array
 
       elsif not Is_Nonnative_Type (GT) then
-         Result := GEP (Comp_GT, Array_Data,
-                        GL_Value_Array'(1 => Size_Const_Null) & Idxs);
+
+         --  Convert each index to the size (pointer-width) type before the
+         --  GEP. The array index type may be wider than the pointer-index
+         --  type (e.g. a 64-bit index on a 32-bit-pointer target such as
+         --  wasm32); leaving the raw index in place makes the backend emit
+         --  pointer arithmetic in the wider type, producing a load whose
+         --  address width no longer matches the memory index type. This
+         --  mirrors what Compute_Index_Offset already does on the nonnative
+         --  path.
+
+         declare
+            Size_Idxs : GL_Value_Array (Idxs'Range);
+         begin
+            for J in Idxs'Range loop
+               Size_Idxs (J) := To_Size_Type (Idxs (J));
+            end loop;
+
+            Result := GEP (Comp_GT, Array_Data,
+                           GL_Value_Array'(1 => Size_Const_Null) & Size_Idxs);
+         end;
+
          Mark_Atomic   (Result, Has_Atomic_Components (GT));
          Mark_Volatile (Result, Has_Volatile_Components (GT));
          Adjust_Array_Component_Alignment (Result, V, Comp_GT);
