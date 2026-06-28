@@ -1108,8 +1108,28 @@ package body GNATLLVM.Instructions is
    -- Build_Ret --
    ---------------
 
+   --  A return inside a wasm catchpad funclet is illegal: control must first
+   --  leave the funclet via catchret.  Convert it to "catchret to a fresh
+   --  continuation block, then ret there".  Clears Current_Funclet because
+   --  the continuation runs outside the funclet.
+
+   procedure Exit_Funclet_For_Return;
+
+   procedure Exit_Funclet_For_Return is
+      Pad  : constant Value_T := Current_Funclet;
+      Cont : Basic_Block_T;
+   begin
+      if Present (Pad) then
+         Cont := Create_Basic_Block ("catchret");
+         Set_Current_Funclet (No_Value_T);
+         Build_Catch_Ret (Pad, Cont);
+         Position_Builder_At_End (Cont);
+      end if;
+   end Exit_Funclet_For_Return;
+
    procedure Build_Ret (V : GL_Value) is
    begin
+      Exit_Funclet_For_Return;
       Discard (Build_Ret (IR_Builder, +V));
    end Build_Ret;
 
@@ -1119,6 +1139,7 @@ package body GNATLLVM.Instructions is
 
    procedure Build_Ret_Void is
    begin
+      Exit_Funclet_For_Return;
       Discard (Build_Ret_Void (IR_Builder));
    end Build_Ret_Void;
 
@@ -1757,10 +1778,25 @@ package body GNATLLVM.Instructions is
 
       if Present (Lpad) then
          Next_BB := Create_Basic_Block;
-         Call_Inst := Invoke_2 (IR_Builder, Fn_T, LLVM_Func,
-                                Arg_Values'Address, Arg_Values'Length,
-                                Next_BB, Lpad, Name);
+
+         --  Inside a wasm funclet, every call/invoke must carry the
+         --  "funclet" operand bundle for the enclosing pad.
+
+         if Present (Current_Funclet) then
+            Call_Inst := GNATLLVM.Wrapper.Build_Invoke_With_Funclet
+              (IR_Builder, Fn_T, LLVM_Func, Next_BB, Lpad,
+               Arg_Values'Address, Arg_Values'Length, Current_Funclet, Name);
+         else
+            Call_Inst := Invoke_2 (IR_Builder, Fn_T, LLVM_Func,
+                                   Arg_Values'Address, Arg_Values'Length,
+                                   Next_BB, Lpad, Name);
+         end if;
+
          Position_Builder_At_End (Next_BB);
+      elsif Present (Current_Funclet) then
+         Call_Inst := GNATLLVM.Wrapper.Build_Call_With_Funclet
+           (IR_Builder, Fn_T, LLVM_Func, Arg_Values'Address,
+            Arg_Values'Length, Current_Funclet, Name);
       else
          Call_Inst := Call_2 (IR_Builder, Fn_T, LLVM_Func,
                               Arg_Values'Address, Arg_Values'Length, Name);
@@ -1924,6 +1960,96 @@ package body GNATLLVM.Instructions is
    begin
       Discard (Build_Resume (IR_Builder, +V));
    end Build_Resume;
+
+   --  Native WebAssembly EH (funclet) support.
+
+   Current_Funclet_Token : Value_T := No_Value_T;
+
+   procedure Set_Current_Funclet (Pad : Value_T) is
+   begin
+      Current_Funclet_Token := Pad;
+   end Set_Current_Funclet;
+
+   function Current_Funclet return Value_T is (Current_Funclet_Token);
+
+   Current_Funclet_Unwind_BB : Basic_Block_T := No_BB_T;
+
+   procedure Set_Current_Funclet_Unwind (BB : Basic_Block_T) is
+   begin
+      Current_Funclet_Unwind_BB := BB;
+   end Set_Current_Funclet_Unwind;
+
+   function Current_Funclet_Unwind return Basic_Block_T is
+     (Current_Funclet_Unwind_BB);
+
+   function Token_None return Value_T is
+     (GNATLLVM.Wrapper.Get_Token_None (IR_Builder));
+
+   function Build_Catch_Switch
+     (Parent_Pad   : Value_T;
+      Unwind_BB    : Basic_Block_T;
+      Num_Handlers : Nat;
+      Name         : String := "") return Value_T
+   is
+     (GNATLLVM.Wrapper.Build_Catch_Switch
+        (IR_Builder, Parent_Pad, Unwind_BB, unsigned (Num_Handlers), Name));
+
+   procedure Add_Catch_Handler
+     (Catch_Switch : Value_T; Dest : Basic_Block_T) is
+   begin
+      GNATLLVM.Wrapper.Add_Catch_Switch_Handler (Catch_Switch, Dest);
+   end Add_Catch_Handler;
+
+   function Build_Catch_Pad
+     (Parent_Pad : Value_T;
+      Excs       : GL_Value_Array;
+      Name       : String := "") return Value_T
+   is
+      Vals : aliased Value_Array (Excs'Range);
+   begin
+      for J in Excs'Range loop
+         Vals (J) := +Excs (J);
+      end loop;
+
+      if Excs'Length = 0 then
+         return GNATLLVM.Wrapper.Build_Catch_Pad
+           (IR_Builder, Parent_Pad, System.Null_Address, 0, Name);
+      else
+         return GNATLLVM.Wrapper.Build_Catch_Pad
+           (IR_Builder, Parent_Pad, Vals'Address, Vals'Length, Name);
+      end if;
+   end Build_Catch_Pad;
+
+   function Build_Cleanup_Pad
+     (Parent_Pad : Value_T; Name : String := "") return Value_T
+   is
+     (GNATLLVM.Wrapper.Build_Cleanup_Pad
+        (IR_Builder, Parent_Pad, System.Null_Address, 0, Name));
+
+   procedure Build_Catch_Ret (Pad : Value_T; Dest : Basic_Block_T) is
+   begin
+      Discard
+        (GNATLLVM.Wrapper.Build_Catch_Ret (IR_Builder, Pad, Dest));
+   end Build_Catch_Ret;
+
+   procedure Build_Cleanup_Ret (Pad : Value_T; Unwind_BB : Basic_Block_T) is
+   begin
+      Discard
+        (GNATLLVM.Wrapper.Build_Cleanup_Ret (IR_Builder, Pad, Unwind_BB));
+   end Build_Cleanup_Ret;
+
+   function Wasm_Get_Exception (Pad : Value_T) return GL_Value is
+     (G (GNATLLVM.Wrapper.Build_Wasm_Get_Exception (IR_Builder, Pad, ""),
+         A_Char_GL_Type, Type_Of (A_Char_GL_Type)));
+
+   function Wasm_Get_Selector (Pad : Value_T) return GL_Value is
+     (G (GNATLLVM.Wrapper.Build_Wasm_Get_Ehselector (IR_Builder, Pad, ""),
+         Integer_GL_Type, Type_Of (Integer_GL_Type)));
+
+   procedure Build_Wasm_Rethrow (Pad : Value_T; Unwind_BB : Basic_Block_T) is
+   begin
+      GNATLLVM.Wrapper.Build_Wasm_Rethrow (IR_Builder, Pad, Unwind_BB);
+   end Build_Wasm_Rethrow;
 
    ----------------
    -- Inline_Asm --

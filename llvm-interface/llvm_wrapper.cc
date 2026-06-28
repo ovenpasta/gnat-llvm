@@ -1,6 +1,8 @@
 #include <string.h>
+#include <optional>
 
 #include "llvm-c/Types.h"
+#include "llvm-c/TargetMachine.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringExtras.h"
@@ -21,6 +23,9 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -28,6 +33,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -502,6 +508,190 @@ CallInst *
 Create_Invariant_Start (IRBuilder<> *bld, Value *Ptr, ConstantInt *Size)
 {
   return bld->CreateInvariantStart (Ptr, Size);
+}
+
+/* WebAssembly / funclet (scoped) exception-handling builders.  The LLVM C
+   interface does not expose catchswitch/catchpad/cleanuppad, funclet operand
+   bundles, or the wasm EH intrinsics, so provide them here.  These are used
+   to emit native Wasm EH (the funclet IR shape that WasmEHPrepare lowers).  */
+
+/* The "within none" parent pad for a top-level catchswitch/cleanuppad.  */
+
+extern "C"
+Value *
+Get_Token_None (IRBuilder<> *bld)
+{
+  return ConstantTokenNone::get (bld->getContext ());
+}
+
+extern "C"
+Value *
+Build_Catch_Switch (IRBuilder<> *bld, Value *ParentPad, BasicBlock *UnwindBB,
+		    unsigned NumHandlers, const char *Name)
+{
+  /* UnwindBB == nullptr means "unwind to caller".  */
+  return bld->CreateCatchSwitch (ParentPad, UnwindBB, NumHandlers, Name);
+}
+
+extern "C"
+void
+Add_Catch_Switch_Handler (Value *CatchSwitch, BasicBlock *Dest)
+{
+  cast<CatchSwitchInst> (CatchSwitch)->addHandler (Dest);
+}
+
+extern "C"
+Value *
+Build_Catch_Pad (IRBuilder<> *bld, Value *ParentPad, Value **Args,
+		 unsigned NumArgs, const char *Name)
+{
+  return bld->CreateCatchPad (ParentPad, ArrayRef<Value *> (Args, NumArgs),
+			      Name);
+}
+
+extern "C"
+Value *
+Build_Cleanup_Pad (IRBuilder<> *bld, Value *ParentPad, Value **Args,
+		   unsigned NumArgs, const char *Name)
+{
+  return bld->CreateCleanupPad (ParentPad, ArrayRef<Value *> (Args, NumArgs),
+				Name);
+}
+
+extern "C"
+Value *
+Build_Catch_Ret (IRBuilder<> *bld, Value *CatchPad, BasicBlock *Dest)
+{
+  return bld->CreateCatchRet (cast<CatchPadInst> (CatchPad), Dest);
+}
+
+extern "C"
+Value *
+Build_Cleanup_Ret (IRBuilder<> *bld, Value *CleanupPad, BasicBlock *UnwindBB)
+{
+  /* UnwindBB == nullptr means "unwind to caller".  */
+  return bld->CreateCleanupRet (cast<CleanupPadInst> (CleanupPad), UnwindBB);
+}
+
+/* call/invoke carrying the mandatory "funclet" operand bundle for code that
+   executes inside a catchpad/cleanuppad.  FuncletPad may be nullptr (no
+   bundle) for the common non-funclet case.  */
+
+extern "C"
+Value *
+Build_Call_With_Funclet (IRBuilder<> *bld, FunctionType *FnTy, Value *Callee,
+			 Value **Args, unsigned NumArgs, Value *FuncletPad,
+			 const char *Name)
+{
+  SmallVector<OperandBundleDef, 1> Bundles;
+  if (FuncletPad)
+    Bundles.emplace_back ("funclet", ArrayRef<Value *> (FuncletPad));
+  return bld->CreateCall (FnTy, Callee, ArrayRef<Value *> (Args, NumArgs),
+			  Bundles, Name);
+}
+
+extern "C"
+Value *
+Build_Invoke_With_Funclet (IRBuilder<> *bld, FunctionType *FnTy, Value *Callee,
+			   BasicBlock *NormalDest, BasicBlock *UnwindDest,
+			   Value **Args, unsigned NumArgs, Value *FuncletPad,
+			   const char *Name)
+{
+  SmallVector<OperandBundleDef, 1> Bundles;
+  if (FuncletPad)
+    Bundles.emplace_back ("funclet", ArrayRef<Value *> (FuncletPad));
+  return bld->CreateInvoke (FnTy, Callee, NormalDest, UnwindDest,
+			    ArrayRef<Value *> (Args, NumArgs), Bundles, Name);
+}
+
+/* llvm.wasm.get.exception / llvm.wasm.get.ehselector take the catchpad token
+   and recover the thrown exception pointer and the personality selector.  */
+
+extern "C"
+Value *
+Build_Wasm_Get_Exception (IRBuilder<> *bld, Value *CatchPad, const char *Name)
+{
+  Module *M = bld->GetInsertBlock ()->getModule ();
+  Function *F
+    = Intrinsic::getOrInsertDeclaration (M, Intrinsic::wasm_get_exception);
+  return bld->CreateCall (F, {CatchPad}, Name);
+}
+
+extern "C"
+Value *
+Build_Wasm_Get_Ehselector (IRBuilder<> *bld, Value *CatchPad,
+			   const char *Name)
+{
+  Module *M = bld->GetInsertBlock ()->getModule ();
+  Function *F
+    = Intrinsic::getOrInsertDeclaration (M, Intrinsic::wasm_get_ehselector);
+  return bld->CreateCall (F, {CatchPad}, Name);
+}
+
+/* The llvm.wasm.rethrow intrinsic function, to be used as the callee of an
+   invoke (with a funclet bundle) for a re-raise inside a handler.  */
+
+extern "C"
+Value *
+Get_Wasm_Rethrow_Fn (Module *M)
+{
+  return Intrinsic::getOrInsertDeclaration (M, Intrinsic::wasm_rethrow);
+}
+
+// Emit a re-raise inside a funclet: llvm.wasm.rethrow() (noreturn) carrying
+// the funclet bundle.  Used for the no-clause-match path of a catchpad and for
+// a bare "raise;" inside a handler.
+//
+// When UnwindBB is non-null (there is an enclosing handler in this function),
+// the rethrow must be an INVOKE unwinding to that block - which must be the
+// same dest as the enclosing catchswitch - so the exception reaches the outer
+// handler.  A plain call would carry no unwind edge and escape to the caller.
+// When UnwindBB is null (no enclosing handler) the rethrow correctly
+// propagates to the caller, so a plain call + unreachable is right.
+extern "C"
+void
+Build_Wasm_Rethrow (IRBuilder<> *bld, Value *FuncletPad, BasicBlock *UnwindBB)
+{
+  Module *M = bld->GetInsertBlock ()->getModule ();
+  Function *F = Intrinsic::getOrInsertDeclaration (M, Intrinsic::wasm_rethrow);
+  SmallVector<OperandBundleDef, 1> Bundles;
+  if (FuncletPad)
+    Bundles.emplace_back ("funclet", ArrayRef<Value *> (FuncletPad));
+
+  if (UnwindBB)
+    {
+      BasicBlock *Cont = BasicBlock::Create (bld->getContext (), "rethrow.cont",
+					     bld->GetInsertBlock ()->getParent ());
+      bld->CreateInvoke (F->getFunctionType (), F, Cont, UnwindBB, {}, Bundles);
+      bld->SetInsertPoint (Cont);
+      bld->CreateUnreachable ();
+    }
+  else
+    {
+      bld->CreateCall (F->getFunctionType (), F, {}, Bundles);
+      bld->CreateUnreachable ();
+    }
+}
+
+// Turn on the WebAssembly backend's exception-handling lowering by setting the
+// internal -wasm-enable-eh (+ -wasm-use-legacy-eh) cl::opts.  Setting the
+// target-machine ExceptionModel alone is NOT sufficient through the
+// GNAT-LLVM pipeline: the backend gates funclet EH lowering on these options
+// and otherwise silently drops the EH.  Mirrors emcc's "-mllvm" flags.
+extern "C"
+void
+Set_Wasm_EH_Command_Line_Options (bool enable, bool legacy)
+{
+  auto &opts = llvm::cl::getRegisteredOptions ();
+  auto set_bool = [&] (const char *name, bool val) {
+    auto it = opts.find (name);
+    if (it != opts.end ())
+      static_cast<llvm::cl::opt<bool> *> (it->second)->setValue (val);
+  };
+  //  Set deterministically (including the off case) so state does not leak
+  //  across codegen sessions in a reused process.
+  set_bool ("wasm-enable-eh", enable);
+  set_bool ("wasm-use-legacy-eh", enable && legacy);
 }
 
 extern "C"
@@ -1327,15 +1517,90 @@ Is_x86 (const char *Target)
 }
 
 extern "C"
+bool
+Is_Wasm (const char *Target)
+{
+  Triple TargetTriple (Target);
+  return TargetTriple.getArch () == Triple::wasm32
+         || TargetTriple.getArch () == Triple::wasm64;
+}
+
+// Native WebAssembly exception handling state.  Off by default so the
+// existing No_Exception_Propagation wasm build is unchanged; the front-end
+// EH profile / build knob turns it on (see GNATLLVM.Codegen).  g_wasm_eh_legacy
+// selects the legacy encoding (default) vs the new exnref encoding.
+static bool g_wasm_eh_enabled = false;
+static bool g_wasm_eh_legacy = true;
+
+// Booleans are exchanged with Ada as the 1-byte LLVM_Bool type (see
+// GNATLLVM), so use C++ bool here to match its size/ABI (like Has_SEH).
+extern "C"
+void
+Set_Wasm_EH (bool Enabled, bool Legacy)
+{
+  g_wasm_eh_enabled = Enabled;
+  g_wasm_eh_legacy = Legacy;
+}
+
+extern "C"
+bool
+Wasm_EH_Enabled (void)
+{
+  return g_wasm_eh_enabled;
+}
+
+extern "C"
+bool
+Wasm_EH_Legacy (void)
+{
+  return g_wasm_eh_legacy;
+}
+
+extern "C"
 const char *
 Get_Personality_Function_Name (const char *Target)
 {
+  // WebAssembly native EH: the IR personality slot MUST be named
+  // __gxx_wasm_personality_v0.  LLVM's WasmEHPrepare pass hard-requires this
+  // exact name to recognize scoped (funclet) wasm EH and aborts otherwise.
+  // The name is only a marker, NOT a link-time symbol; GNAT's actual matcher
+  // is interposed at the runtime personality call.  Returning it
+  // unconditionally for wasm is safe: it is only referenced when EH landing
+  // pads are emitted.
+  if (Is_Wasm (Target))
+    return "__gxx_wasm_personality_v0";
+
   // For now, we don't support SJLJ exceptions, so we just need to decide
   // whether the target uses SEH.
   if (Has_SEH (Target))
     return "__gnat_personality_seh0";
   else
     return "__gnat_personality_v0";
+}
+
+// Return a target machine equivalent to Old but with the Wasm exception
+// model, so the codegen pipeline schedules WasmEHPrepare.  The exception
+// model must be set BEFORE the target machine is constructed (the WebAssembly
+// backend caches it); mutating Old->Options afterwards has no effect.  We
+// therefore rebuild the machine from Old's own configuration plus the model.
+// Must be paired with the -wasm-enable-eh (+ -wasm-use-legacy-eh) options.
+extern "C"
+TargetMachine *
+Recreate_Target_Machine_With_Wasm_EH (TargetMachine *Old)
+{
+  if (!g_wasm_eh_enabled)
+    return Old;
+
+  const Target &T = Old->getTarget ();
+  llvm::TargetOptions Opts = Old->Options;
+  Opts.ExceptionModel = llvm::ExceptionHandling::Wasm;
+
+  return T.createTargetMachine (
+    Old->getTargetTriple (), Old->getTargetCPU (),
+    Old->getTargetFeatureString (), Opts,
+    std::optional<Reloc::Model> (Old->getRelocationModel ()),
+    std::optional<CodeModel::Model> (Old->getCodeModel ()),
+    Old->getOptLevel ());
 }
 
 extern "C"
@@ -1353,6 +1618,15 @@ Get_Features (const char *TargetTriple, const char *Arch, const char *CPU)
 
   switch (T.getArch()) {
   default:
+    return nullptr;
+
+  case Triple::wasm32:
+  case Triple::wasm64:
+    // Advertise the exception-handling target feature when native wasm EH is
+    // enabled, so the backend may emit the EH instructions.  Otherwise leave
+    // the wasm feature set untouched (current No_Exception_Propagation build).
+    if (g_wasm_eh_enabled)
+      return strdup ("+exception-handling");
     return nullptr;
 
   case Triple::aarch64: {

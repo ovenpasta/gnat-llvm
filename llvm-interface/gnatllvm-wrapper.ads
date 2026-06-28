@@ -247,6 +247,91 @@ package GNATLLVM.Wrapper is
       Size : Value_T) return Value_T
      with Import, Convention => C, External_Name => "Create_Invariant_Start";
 
+   --  WebAssembly / funclet (scoped) exception-handling builders.  Used to
+   --  emit native Wasm EH: the funclet IR (catchswitch / catchpad /
+   --  cleanuppad / catchret / cleanupret with "funclet" operand bundles)
+   --  that LLVM's WasmEHPrepare pass lowers to the wasm try/catch/throw
+   --  instructions.
+
+   function Get_Token_None (Bld : Builder_T) return Value_T
+     with Import, Convention => C, External_Name => "Get_Token_None";
+   --  The "within none" parent pad for a top-level catchswitch/cleanuppad.
+
+   function Build_Catch_Switch
+     (Bld          : Builder_T;
+      Parent_Pad   : Value_T;
+      Unwind_BB    : Basic_Block_T;
+      Num_Handlers : unsigned;
+      Name         : String) return Value_T;
+   --  Unwind_BB = No_BB_T means "unwind to caller".
+
+   procedure Add_Catch_Switch_Handler
+     (Catch_Switch : Value_T; Dest : Basic_Block_T)
+     with Import, Convention => C,
+          External_Name => "Add_Catch_Switch_Handler";
+
+   function Build_Catch_Pad
+     (Bld        : Builder_T;
+      Parent_Pad : Value_T;
+      Args       : System.Address;
+      Num_Args   : unsigned;
+      Name       : String) return Value_T;
+
+   function Build_Cleanup_Pad
+     (Bld        : Builder_T;
+      Parent_Pad : Value_T;
+      Args       : System.Address;
+      Num_Args   : unsigned;
+      Name       : String) return Value_T;
+
+   function Build_Catch_Ret
+     (Bld : Builder_T; Catch_Pad : Value_T; Dest : Basic_Block_T)
+      return Value_T
+     with Import, Convention => C, External_Name => "Build_Catch_Ret";
+
+   function Build_Cleanup_Ret
+     (Bld : Builder_T; Cleanup_Pad : Value_T; Unwind_BB : Basic_Block_T)
+      return Value_T
+     with Import, Convention => C, External_Name => "Build_Cleanup_Ret";
+   --  Unwind_BB = No_BB_T means "unwind to caller".
+
+   function Build_Call_With_Funclet
+     (Bld         : Builder_T;
+      Fn_Ty       : Type_T;
+      Callee      : Value_T;
+      Args        : System.Address;
+      Num_Args    : unsigned;
+      Funclet_Pad : Value_T;
+      Name        : String) return Value_T;
+   --  Funclet_Pad = No_Value_T omits the operand bundle.
+
+   function Build_Invoke_With_Funclet
+     (Bld         : Builder_T;
+      Fn_Ty       : Type_T;
+      Callee      : Value_T;
+      Normal_Dest : Basic_Block_T;
+      Unwind_Dest : Basic_Block_T;
+      Args        : System.Address;
+      Num_Args    : unsigned;
+      Funclet_Pad : Value_T;
+      Name        : String) return Value_T;
+
+   function Build_Wasm_Get_Exception
+     (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T;
+
+   function Build_Wasm_Get_Ehselector
+     (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T;
+
+   function Get_Wasm_Rethrow_Fn (M : Module_T) return Value_T
+     with Import, Convention => C, External_Name => "Get_Wasm_Rethrow_Fn";
+
+   procedure Build_Wasm_Rethrow
+     (Bld : Builder_T; Funclet_Pad : Value_T; Unwind_BB : Basic_Block_T)
+     with Import, Convention => C, External_Name => "Build_Wasm_Rethrow";
+   --  Emit llvm.wasm.rethrow() (with the funclet bundle).  Unwind_BB /=
+   --  No_BB_T -> invoke unwinding there (reach the enclosing handler);
+   --  No_BB_T -> plain call + unreachable (propagate to the caller).
+
    function Does_Not_Throw (Fn : Value_T) return Boolean
      with Pre => Present (Is_A_Function (Fn)), Inline;
 
@@ -469,6 +554,35 @@ package GNATLLVM.Wrapper is
    function Get_Personality_Function_Name (Triple : String) return String;
 
    function Get_Features (Triple, Arch, CPU : String) return String;
+
+   function Is_Wasm (Triple : String) return Boolean;
+
+   --  Native WebAssembly exception handling.  Off by default so the existing
+   --  No_Exception_Propagation wasm build is unchanged; the front-end EH
+   --  profile / build knob enables it.  Legacy selects the legacy wasm EH
+   --  encoding (broad runtime support) vs the new exnref encoding.
+
+   procedure Set_Wasm_EH (Enabled : Boolean; Legacy : Boolean);
+
+   function Wasm_EH_Enabled return Boolean;
+
+   function Wasm_EH_Legacy return Boolean;
+
+   function Recreate_Target_Machine_With_Wasm_EH
+     (Old : Target_Machine_T) return Target_Machine_T
+     with Import, Convention => C,
+          External_Name => "Recreate_Target_Machine_With_Wasm_EH";
+   --  Return a target machine like Old but with the Wasm exception model
+   --  (schedules WasmEHPrepare).  The model must be set before construction,
+   --  so the machine is rebuilt.  Returns Old unchanged when Wasm EH is off.
+   --  Pair with the -wasm-enable-eh (+ -wasm-use-legacy-eh) options.
+
+   procedure Set_Wasm_EH_Command_Line_Options
+     (Enabled : Boolean; Legacy : Boolean);
+   --  Set the backend -wasm-enable-eh / -wasm-use-legacy-eh cl::opts to match
+   --  Enabled (deterministically, including the off case, so state does not
+   --  leak across codegen sessions).  Required in addition to the exception
+   --  model: the wasm backend gates funclet EH lowering on these.
 
    function Get_Target_Default_CPU (Triple : String) return String;
 

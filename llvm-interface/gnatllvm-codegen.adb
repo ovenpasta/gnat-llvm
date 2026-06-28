@@ -38,6 +38,7 @@ with Set_Targ; use Set_Targ;
 with Lib;      use Lib;
 with Opt;      use Opt;
 with Osint;    use Osint;
+with Restrict;  use Restrict;
 with Osint.C;  use Osint.C;
 with Output;   use Output;
 with Switch;   use Switch;
@@ -636,6 +637,25 @@ package body GNATLLVM.Codegen is
       Enable_Execute_Stack :=
         Need_Enable_Execute_Stack (Normalized_Target_Triple.all);
 
+      --  Enable native WebAssembly exception handling (funclet IR) when
+      --  targeting wasm with back-end exceptions in effect (i.e. not the
+      --  No_Exception_Propagation profile).  Off otherwise, so the current
+      --  wasm runtime build is unchanged.  Legacy encoding by default.  Set
+      --  the state deterministically (both the on and off cases) so it does
+      --  not leak across codegen sessions in a reused process.  The backend
+      --  cl::opts must be set in addition to the exception model: the wasm
+      --  backend gates funclet EH on them and otherwise silently drops it.
+
+      declare
+         Wasm_EH_On : constant Boolean :=
+           Is_Wasm (Normalized_Target_Triple.all)
+             and then not No_Exception_Propagation_Active;
+      begin
+         Set_Wasm_EH (Enabled => Wasm_EH_On, Legacy => True);
+         Set_Wasm_EH_Command_Line_Options
+           (Enabled => Wasm_EH_On, Legacy => True);
+      end;
+
       if not PIC_PIE_Set then
          --  Set the same target-dependent default as Clang: PIE level 2 for
          --  Linux and 64-bit Windows, and neither PIC nor PIE otherwise. (The
@@ -707,6 +727,16 @@ package body GNATLLVM.Codegen is
            Options    => TM_Options);
 
       Dispose_Target_Machine_Options (TM_Options);
+
+      --  When native wasm EH is enabled, rebuild the target machine with the
+      --  Wasm exception model so the codegen pipeline schedules WasmEHPrepare.
+      --  (The model must be set before construction; mutating it afterwards
+      --  has no effect.)
+
+      if Wasm_EH_Enabled then
+         Target_Machine :=
+           Recreate_Target_Machine_With_Wasm_EH (Target_Machine);
+      end if;
 
       Enable_Init_Array (Target_Machine);
 

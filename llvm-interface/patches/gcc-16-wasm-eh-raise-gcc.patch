@@ -1,0 +1,164 @@
+diff --git a/gcc/ada/raise-gcc.c b/gcc/ada/raise-gcc.c
+index eba92f4b19f..4bb5c17309f 100644
+--- a/gcc/ada/raise-gcc.c
++++ b/gcc/ada/raise-gcc.c
+@@ -91,6 +91,12 @@
+ #define _UA_END_OF_STACK 0
+ #endif
+ 
++#ifdef __wasm__
++/* emscripten's wasm libunwind provides _Unwind_GetIP (returning a landing-pad
++   index) but aborts on _Unwind_GetIPInfo.  Use the former.  */
++#undef HAVE_GETIPINFO
++#endif
++
+ /* The names of a couple of "standard" routines for unwinding/propagation
+    actually vary depending on the underlying GCC scheme for exception handling
+    (SJLJ or DWARF). We need a consistently named interface to import from
+@@ -123,11 +129,20 @@ extern "C" {
+ typedef struct _Unwind_Context _Unwind_Context;
+ typedef struct _Unwind_Exception _Unwind_Exception;
+ 
++#ifdef __wasm__
++/* Void on wasm to match the Ada procedure imports (see definitions below).  */
++void
++__gnat_Unwind_RaiseException (_Unwind_Exception *);
++
++void
++__gnat_Unwind_ForcedUnwind (_Unwind_Exception *, _Unwind_Stop_Fn, void *);
++#else
+ _Unwind_Reason_Code
+ __gnat_Unwind_RaiseException (_Unwind_Exception *);
+ 
+ _Unwind_Reason_Code
+ __gnat_Unwind_ForcedUnwind (_Unwind_Exception *, _Unwind_Stop_Fn, void *);
++#endif
+ 
+ extern struct Exception_Occurrence *
+ __gnat_setup_current_excep (_Unwind_Exception *, _Unwind_Action, Exception_Id);
+@@ -807,11 +822,18 @@ db_action_for (action_descriptor *action, _Unwind_Ptr ip)
+    analysis.  Otherwise, set the ACTION kind to nothing.
+ 
+    There are two variants of this routine, depending on the underlying
+-   mechanism (DWARF/SJLJ), which account for differences in the tables.  */
++   mechanism (DWARF/SJLJ), which account for differences in the tables.
+ 
+-#ifdef __USING_SJLJ_EXCEPTIONS__
++   WebAssembly EH uses the same index-based call-site table as SJLJ: the
++   "IP" is a 1-based index into a table of (landing_pad, action) ULEB128
++   pairs (see libc++abi cxa_personality.cpp, which treats __WASM_EXCEPTIONS__
++   exactly like __USING_SJLJ_EXCEPTIONS__ here).  */
+ 
++#if defined (__USING_SJLJ_EXCEPTIONS__) || defined (__wasm__)
++
++#ifndef __builtin_eh_return_data_regno
+ #define __builtin_eh_return_data_regno(x) x
++#endif
+ 
+ static void
+ get_call_site_action_for (_Unwind_Ptr call_site,
+@@ -1430,6 +1452,34 @@ personality_body (_Unwind_Action uw_phases,
+   if (action.kind == nothing)
+     return continue_unwind (uw_exception, uw_context);
+ 
++#ifdef __wasm__
++  /* WebAssembly exception handling is single-phase: libunwind's
++     _Unwind_CallPersonality invokes the personality exactly once (nominally
++     with _UA_SEARCH_PHASE) from the catch landing pad, and expects the handler
++     switch value (the ttype filter / selector) to have been installed via
++     _Unwind_SetGR by the time it returns.  There is no separate install phase.
++     So run the search-phase notifications and install in the same call.  */
++  if (action.kind != cleanup)
++    {
++#ifndef CERT
++      struct Exception_Occurrence *excep
++	= __gnat_setup_current_excep (uw_exception, uw_phases, eid);
++
++      if (action.kind == unhandler)
++	__gnat_notify_unhandled_exception (excep);
++      else
++	__gnat_notify_handled_exception (excep);
++#endif
++    }
++
++  setup_to_install
++    (uw_context, uw_exception, action.landing_pad, action.ttype_filter);
++#ifndef CERT
++  __gnat_setup_current_excep (uw_exception, uw_phases, eid);
++#endif
++  return _URC_INSTALL_CONTEXT;
++#else
++
+   /* If we found something in search phase, we should return a code indicating
+      what to do next depending on what we found. If we only have cleanups
+      around, we shall try to unwind further up to find a handler, otherwise,
+@@ -1487,6 +1537,7 @@ personality_body (_Unwind_Action uw_phases,
+ #endif
+ 
+   return _URC_INSTALL_CONTEXT;
++#endif /* __wasm__ */
+ }
+ 
+ #ifndef __ARM_EABI_UNWINDER__
+@@ -1607,6 +1658,28 @@ __gnat_cleanupunwind_handler (int version ATTRIBUTE_UNUSED,
+ 
+ /* Define the consistently named wrappers imported by Propagate_Exception.  */
+ 
++/* On wasm these return void to match the Ada procedure imports in a-exexpr
++   (GNAT ignores the reason code).  wasm's strict result typing cannot call an
++   i32-returning function as void, unlike the native ABI.  */
++#ifdef __wasm__
++void
++__gnat_Unwind_RaiseException (_Unwind_Exception *e)
++{
++  _Unwind_RaiseException (e);
++}
++
++void
++__gnat_Unwind_ForcedUnwind (_Unwind_Exception *e,
++			    _Unwind_Stop_Fn handler,
++			    void *argument)
++{
++  /* Forced unwind (task termination / abort-deferral) is not supported by
++     emscripten's wasm libunwind.  It is not reached on the normal raise/handle
++     path; abort if it ever is.  */
++  (void) e; (void) handler; (void) argument;
++  abort ();
++}
++#else
+ _Unwind_Reason_Code
+ __gnat_Unwind_RaiseException (_Unwind_Exception *e)
+ {
+@@ -1639,6 +1712,7 @@ __gnat_Unwind_ForcedUnwind (_Unwind_Exception *e ATTRIBUTE_UNUSED,
+   return _Unwind_ForcedUnwind (e, handler, argument);
+ #endif
+ }
++#endif /* __wasm__ */
+ 
+ #if defined (__SEH__) && !defined (__USING_SJLJ_EXCEPTIONS__)
+ 
+@@ -1859,6 +1933,24 @@ __gnat_personality_v0 (version_arg_t version_arg,
+ 
+ #endif /* SEH */
+ 
++#ifdef __wasm__
++/* Emscripten's libunwind invokes the C++-named personality
++   __gxx_personality_wasm0 from each catch landing pad (see
++   _Unwind_CallPersonality).  Route it to the GNAT personality
++   (PERSONALITY_FUNCTION, i.e. __gnat_personality_v0 on wasm); only GNU-Ada
++   exceptions are expected in a pure-Ada wasm program.  */
++PERSONALITY_STORAGE _Unwind_Reason_Code
++__gxx_personality_wasm0 (version_arg_t version_arg,
++			 phases_arg_t phases_arg,
++			 _Unwind_Exception_Class uw_exception_class,
++			 _Unwind_Exception *uw_exception,
++			 _Unwind_Context *uw_context)
++{
++  return PERSONALITY_FUNCTION
++    (version_arg, phases_arg, uw_exception_class, uw_exception, uw_context);
++}
++#endif /* __wasm__ */
++
+ #if !defined (__USING_SJLJ_EXCEPTIONS__)
+ /* Size of the _Unwind_Exception structure.  This is used by g-cppexc to get
+    the offset to the C++ object.  */

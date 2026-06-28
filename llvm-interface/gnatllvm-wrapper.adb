@@ -130,6 +130,226 @@ package body GNATLLVM.Wrapper is
                                    Name & ASCII.NUL);
    end Build_Insert_Value;
 
+   ------------------------
+   -- Build_Catch_Switch --
+   ------------------------
+
+   function Build_Catch_Switch
+     (Bld          : Builder_T;
+      Parent_Pad   : Value_T;
+      Unwind_BB    : Basic_Block_T;
+      Num_Handlers : unsigned;
+      Name         : String) return Value_T
+   is
+      function Build_Catch_Switch_C
+        (Bld          : Builder_T;
+         Parent_Pad   : Value_T;
+         Unwind_BB    : Basic_Block_T;
+         Num_Handlers : unsigned;
+         Name         : String) return Value_T
+        with Import, Convention => C, External_Name => "Build_Catch_Switch";
+   begin
+      return Build_Catch_Switch_C
+        (Bld, Parent_Pad, Unwind_BB, Num_Handlers, Name & ASCII.NUL);
+   end Build_Catch_Switch;
+
+   ---------------------
+   -- Build_Catch_Pad --
+   ---------------------
+
+   function Build_Catch_Pad
+     (Bld        : Builder_T;
+      Parent_Pad : Value_T;
+      Args       : System.Address;
+      Num_Args   : unsigned;
+      Name       : String) return Value_T
+   is
+      function Build_Catch_Pad_C
+        (Bld        : Builder_T;
+         Parent_Pad : Value_T;
+         Args       : System.Address;
+         Num_Args   : unsigned;
+         Name       : String) return Value_T
+        with Import, Convention => C, External_Name => "Build_Catch_Pad";
+   begin
+      return Build_Catch_Pad_C
+        (Bld, Parent_Pad, Args, Num_Args, Name & ASCII.NUL);
+   end Build_Catch_Pad;
+
+   -----------------------
+   -- Build_Cleanup_Pad --
+   -----------------------
+
+   function Build_Cleanup_Pad
+     (Bld        : Builder_T;
+      Parent_Pad : Value_T;
+      Args       : System.Address;
+      Num_Args   : unsigned;
+      Name       : String) return Value_T
+   is
+      function Build_Cleanup_Pad_C
+        (Bld        : Builder_T;
+         Parent_Pad : Value_T;
+         Args       : System.Address;
+         Num_Args   : unsigned;
+         Name       : String) return Value_T
+        with Import, Convention => C, External_Name => "Build_Cleanup_Pad";
+   begin
+      return Build_Cleanup_Pad_C
+        (Bld, Parent_Pad, Args, Num_Args, Name & ASCII.NUL);
+   end Build_Cleanup_Pad;
+
+   -----------------------------
+   -- Build_Call_With_Funclet --
+   -----------------------------
+
+   function Build_Call_With_Funclet
+     (Bld         : Builder_T;
+      Fn_Ty       : Type_T;
+      Callee      : Value_T;
+      Args        : System.Address;
+      Num_Args    : unsigned;
+      Funclet_Pad : Value_T;
+      Name        : String) return Value_T
+   is
+      function Build_Call_With_Funclet_C
+        (Bld         : Builder_T;
+         Fn_Ty       : Type_T;
+         Callee      : Value_T;
+         Args        : System.Address;
+         Num_Args    : unsigned;
+         Funclet_Pad : Value_T;
+         Name        : String) return Value_T
+        with Import, Convention => C,
+             External_Name => "Build_Call_With_Funclet";
+   begin
+      return Build_Call_With_Funclet_C
+        (Bld, Fn_Ty, Callee, Args, Num_Args, Funclet_Pad, Name & ASCII.NUL);
+   end Build_Call_With_Funclet;
+
+   -------------------------------
+   -- Build_Invoke_With_Funclet --
+   -------------------------------
+
+   function Build_Invoke_With_Funclet
+     (Bld         : Builder_T;
+      Fn_Ty       : Type_T;
+      Callee      : Value_T;
+      Normal_Dest : Basic_Block_T;
+      Unwind_Dest : Basic_Block_T;
+      Args        : System.Address;
+      Num_Args    : unsigned;
+      Funclet_Pad : Value_T;
+      Name        : String) return Value_T
+   is
+      function Build_Invoke_With_Funclet_C
+        (Bld         : Builder_T;
+         Fn_Ty       : Type_T;
+         Callee      : Value_T;
+         Normal_Dest : Basic_Block_T;
+         Unwind_Dest : Basic_Block_T;
+         Args        : System.Address;
+         Num_Args    : unsigned;
+         Funclet_Pad : Value_T;
+         Name        : String) return Value_T
+        with Import, Convention => C,
+             External_Name => "Build_Invoke_With_Funclet";
+   begin
+      return Build_Invoke_With_Funclet_C
+        (Bld, Fn_Ty, Callee, Normal_Dest, Unwind_Dest, Args, Num_Args,
+         Funclet_Pad, Name & ASCII.NUL);
+   end Build_Invoke_With_Funclet;
+
+   ------------------------------
+   -- Build_Wasm_Get_Exception --
+   ------------------------------
+
+   function Build_Wasm_Get_Exception
+     (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T
+   is
+      function Build_Wasm_Get_Exception_C
+        (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T
+        with Import, Convention => C,
+             External_Name => "Build_Wasm_Get_Exception";
+   begin
+      return Build_Wasm_Get_Exception_C (Bld, Catch_Pad, Name & ASCII.NUL);
+   end Build_Wasm_Get_Exception;
+
+   -------------------------------
+   -- Build_Wasm_Get_Ehselector --
+   -------------------------------
+
+   function Build_Wasm_Get_Ehselector
+     (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T
+   is
+      function Build_Wasm_Get_Ehselector_C
+        (Bld : Builder_T; Catch_Pad : Value_T; Name : String) return Value_T
+        with Import, Convention => C,
+             External_Name => "Build_Wasm_Get_Ehselector";
+   begin
+      return Build_Wasm_Get_Ehselector_C (Bld, Catch_Pad, Name & ASCII.NUL);
+   end Build_Wasm_Get_Ehselector;
+
+   -------------
+   -- Is_Wasm --
+   -------------
+
+   function Is_Wasm (Triple : String) return Boolean is
+      function Is_Wasm_C (Triple : String) return LLVM_Bool
+        with Import, Convention => C, External_Name => "Is_Wasm";
+   begin
+      return Is_Wasm_C (Triple & ASCII.NUL) /= 0;
+   end Is_Wasm;
+
+   -----------------
+   -- Set_Wasm_EH --
+   -----------------
+
+   procedure Set_Wasm_EH (Enabled : Boolean; Legacy : Boolean) is
+      procedure Set_Wasm_EH_C (Enabled : LLVM_Bool; Legacy : LLVM_Bool)
+        with Import, Convention => C, External_Name => "Set_Wasm_EH";
+   begin
+      Set_Wasm_EH_C ((if Enabled then 1 else 0), (if Legacy then 1 else 0));
+   end Set_Wasm_EH;
+
+   ---------------------
+   -- Wasm_EH_Enabled --
+   ---------------------
+
+   function Wasm_EH_Enabled return Boolean is
+      function Wasm_EH_Enabled_C return LLVM_Bool
+        with Import, Convention => C, External_Name => "Wasm_EH_Enabled";
+   begin
+      return Wasm_EH_Enabled_C /= 0;
+   end Wasm_EH_Enabled;
+
+   --------------------
+   -- Wasm_EH_Legacy --
+   --------------------
+
+   function Wasm_EH_Legacy return Boolean is
+      function Wasm_EH_Legacy_C return LLVM_Bool
+        with Import, Convention => C, External_Name => "Wasm_EH_Legacy";
+   begin
+      return Wasm_EH_Legacy_C /= 0;
+   end Wasm_EH_Legacy;
+
+   ---------------------------------------
+   -- Set_Wasm_EH_Command_Line_Options --
+   ---------------------------------------
+
+   procedure Set_Wasm_EH_Command_Line_Options
+     (Enabled : Boolean; Legacy : Boolean)
+   is
+      procedure Set_Wasm_EH_Command_Line_Options_C
+        (Enabled : LLVM_Bool; Legacy : LLVM_Bool)
+        with Import, Convention => C,
+             External_Name => "Set_Wasm_EH_Command_Line_Options";
+   begin
+      Set_Wasm_EH_Command_Line_Options_C
+        ((if Enabled then 1 else 0), (if Legacy then 1 else 0));
+   end Set_Wasm_EH_Command_Line_Options;
+
    ------------------
    -- Build_MemCpy --
    ------------------

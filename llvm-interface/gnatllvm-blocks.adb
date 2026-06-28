@@ -330,6 +330,9 @@ package body GNATLLVM.Blocks is
    --  a need for a landing pad. Return the actual landing pad
    --  instruction, if any.
 
+   procedure Emit_Handlers_Wasm (Block : Block_Stack_Level);
+   --  Native WebAssembly EH (funclet) variant of Emit_Handlers.
+
    function Get_File_Name_Address (Index : Source_File_Index) return GL_Value
      with Post => Type_Of (Get_File_Name_Address'Result) = Address_MD;
    --  Return a GL_Value giving the address of a string corresponding to
@@ -1061,6 +1064,309 @@ package body GNATLLVM.Blocks is
 
    end Emit_Raise_Call_With_Extra_Info;
 
+   ------------------------
+   -- Emit_Handlers_Wasm --
+   ------------------------
+
+   --  Native WebAssembly EH (funclet) variant of Emit_Handlers.  Emits
+   --  catchswitch/catchpad/cleanuppad/catchret/cleanupret instead of
+   --  landingpad/resume.  Calls inside the funclet automatically receive the
+   --  "funclet" operand bundle via Current_Funclet (set here, honored in
+   --  Call_Internal).  First milestone: single-level blocks (cleanup-only or
+   --  exception handlers); the no-clause-match path is left unreachable
+   --  pending a wasm.rethrow (correct for "when others", which always
+   --  matches).
+
+   procedure Emit_Handlers_Wasm (Block : Block_Stack_Level) is
+      BI           : Block_Info renames Block_Stack.Table (Block);
+
+      --  If we are emitting this block's EH while already inside a funclet
+      --  (e.g. a controlled object whose finalization is wrapped by an outer
+      --  handler), the new pad must be parented to that enclosing pad rather
+      --  than "within none", and its unwind must match the parent's.  We save
+      --  the enclosing funclet/unwind on entry and RESTORE them on exit (not
+      --  clear to none), so a sibling nested region emitted afterwards still
+      --  sees the right enclosing funclet.  At top level there is none, so the
+      --  parent pad is ConstantTokenNone.
+      Saved_Funclet   : constant Value_T        := Current_Funclet;
+      Saved_Unwind    : constant Basic_Block_T  := Current_Funclet_Unwind;
+      Enclosing_Pad   : constant Value_T        :=
+        (if Present (Saved_Funclet) then Saved_Funclet else Token_None);
+
+      Next_BB      : constant Basic_Block_T := Create_Basic_Block;
+      Outer_Unwind : Basic_Block_T         := No_BB_T;
+      Switch_Tok   : Value_T;
+      Pad_Tok      : Value_T;
+      CP_BB        : Basic_Block_T;
+      BB           : Basic_Block_T;
+      Handler      : Opt_N_Exception_Handler_Id;
+      Choice       : Opt_N_Is_Exception_Choice_Id;
+      Exc          : GL_Value;
+      Exc_Ptr      : GL_Value;
+      Selector     : GL_Value;
+
+      function Choice_To_Exc
+        (Choice : N_Is_Exception_Choice_Id) return GL_Value
+      is
+        (if   Nkind (Choice) = N_Others_Choice
+         then (if   All_Others (Choice) then All_Others_Value
+               else Others_Value)
+         else Emit_LValue (Choice));
+
+      type One_Clause is record
+         BB    : Basic_Block_T;
+         Exc   : GL_Value;
+         Param : Opt_E_Variable_Id;
+         Stmts : List_Id;
+      end record;
+
+      package Clauses is new Table.Table
+        (Table_Component_Type => One_Clause,
+         Table_Index_Type     => Nat,
+         Table_Low_Bound      => 1,
+         Table_Initial        => 15,
+         Table_Increment      => 5,
+         Table_Name           => "WClauses");
+
+      package Excs_Tab is new Table.Table
+        (Table_Component_Type => GL_Value,
+         Table_Index_Type     => Nat,
+         Table_Low_Bound      => 1,
+         Table_Initial        => 15,
+         Table_Increment      => 5,
+         Table_Name           => "WExcs");
+
+   begin
+      Initialize_Predefines;
+
+      --  This is reached on the unwind (exception) path only, which requires
+      --  a landing pad to have been created as the invoke unwind dest.
+
+      if No (BI.Landing_Pad) then
+         return;
+      end if;
+
+      --  Funclet EH requires the function to carry the personality (the
+      --  landingpad path sets it via the landingpad instruction).
+
+      Set_Personality_Fn (+Current_Func, +Personality_Fn);
+
+      --  Our unwind destination is the nearest enclosing protected block's
+      --  landing pad, if any; otherwise we unwind to the caller.  This block
+      --  scan naturally yields the next enclosing cleanup/handler even when we
+      --  are nested inside a handler funclet (the enclosing block is still
+      --  "protected" while we emit code within it), so a nested cleanuppad's
+      --  cleanupret and the invokes inside it share one unwind dest, as the
+      --  funclet verifier requires.
+
+      for J in reverse 1 .. Block - 1 loop
+         if (Present (Block_Stack.Table (J).At_End_Proc)
+             or else Present (Block_Stack.Table (J).EH_List))
+           and then not Block_Stack.Table (J).Unprotected
+         then
+            if No (Block_Stack.Table (J).Landing_Pad) then
+               Block_Stack.Table (J).Landing_Pad :=
+                 Create_Basic_Block ("LPAD");
+            end if;
+
+            Outer_Unwind := Block_Stack.Table (J).Landing_Pad;
+            exit;
+         end if;
+      end loop;
+
+      if Present (BI.EH_List) or else BI.Catch_Unhandled then
+
+         --  Collect the handler clauses for this block.
+
+         Handler := First_Non_Pragma (BI.EH_List);
+         while Present (Handler) loop
+            BB     := Create_Basic_Block;
+            Choice := First (Exception_Choices (Handler));
+            while Present (Choice) loop
+               Exc := Choice_To_Exc (Choice);
+               Excs_Tab.Append (Exc);
+               Clauses.Append
+                 ((BB    => BB,
+                   Exc   => Convert_To_Access (Exc, A_Char_GL_Type),
+                   Param => Choice_Parameter (Handler),
+                   Stmts => Statements (Handler)));
+               Next (Choice);
+            end loop;
+
+            Next_Non_Pragma (Handler);
+         end loop;
+
+         if BI.Catch_Unhandled then
+            Excs_Tab.Append (Unhandled_Others_Value);
+         end if;
+
+         --  Emit the catchswitch and catchpad.
+
+         Position_Builder_At_End (BI.Landing_Pad);
+         CP_BB      := Create_Basic_Block ("CATCHPAD");
+         Switch_Tok := Build_Catch_Switch (Enclosing_Pad, Outer_Unwind, 1);
+         Add_Catch_Handler (Switch_Tok, CP_BB);
+
+         Position_Builder_At_End (CP_BB);
+
+         declare
+            Clause_Excs : GL_Value_Array (1 .. Excs_Tab.Last);
+         begin
+            for J in 1 .. Excs_Tab.Last loop
+               Clause_Excs (J) := Excs_Tab.Table (J);
+            end loop;
+
+            Pad_Tok := Build_Catch_Pad (Switch_Tok, Clause_Excs);
+         end;
+
+         Set_Current_Funclet (Pad_Tok);
+         Exc_Ptr    := Wasm_Get_Exception (Pad_Tok);
+         Selector   := Wasm_Get_Selector  (Pad_Tok);
+         BI.Exc_Ptr := Exc_Ptr;
+
+         --  Emit each handler body inside the funclet using the standard
+         --  block machinery (begin/end handler via the inner block's At_End),
+         --  terminating with catchret instead of a branch.
+
+         for J in 1 .. Clauses.Last loop
+            if No (Get_Last_Instruction (Clauses.Table (J).BB)) then
+               Position_Builder_At_End (Clauses.Table (J).BB);
+
+               --  Re-assert the funclet: a return in the previous handler
+               --  body cleared it via catchret interception.  Also record the
+               --  unwind dest so a bare "raise;" in the body re-propagates to
+               --  the enclosing handler.
+
+               Set_Current_Funclet (Pad_Tok);
+               Set_Current_Funclet_Unwind (Outer_Unwind);
+               Push_Block;
+
+               declare
+                  BI_Inner : Block_Info
+                    renames Block_Stack.Table (Block_Stack.Last);
+
+               begin
+                  BI_Inner.At_End_Proc        := End_Handler_Fn;
+                  BI_Inner.At_End_Parameter   := Exc_Ptr;
+                  BI_Inner.At_End_Parameter_2 :=
+                    Call (Begin_Handler_Fn, (1 => Exc_Ptr));
+                  BI_Inner.At_End_Pass_Excptr := True;
+               end;
+
+               if Present (Clauses.Table (J).Param) then
+                  declare
+                     Param   : constant E_Variable_Id :=
+                       Clauses.Table (J).Param;
+                     GT      : constant GL_Type   := Full_GL_Type (Param);
+                     V       : constant GL_Value  :=
+                       Allocate_For_Type (GT, N => Param, E => Param);
+                     Cvt_Ptr : constant GL_Value  :=
+                       Convert_To_Access (Exc_Ptr, A_Char_GL_Type);
+
+                  begin
+                     Call (Get_Set_EH_Param_Fn (GT),
+                           (1 => V, 2 => Cvt_Ptr));
+                     Set_Value (Param, V);
+                  end;
+               end if;
+
+               Emit (Clauses.Table (J).Stmts);
+
+               --  Re-assert the funclet before popping: a return inside the
+               --  handler body leaves the funclet via catchret, which clears
+               --  Current_Funclet.  Pop_Block emits this inner block's
+               --  end-handler cleanup, whose cleanuppad must be parented
+               --  "within" this catchpad (not "within none") so the body's
+               --  invokes (unwinding to that cleanup) stay inside the funclet
+               --  and do not become a second, conflicting unwind edge out of
+               --  the catchpad.
+
+               Set_Current_Funclet (Pad_Tok);
+               Set_Current_Funclet_Unwind (Outer_Unwind);
+               Pop_Block;
+
+               if not Are_In_Dead_Code then
+                  Build_Catch_Ret (Pad_Tok, Next_BB);
+               end if;
+            end if;
+         end loop;
+
+         --  Dispatch from the catchpad to each handler by selector.  The
+         --  dispatch blocks live inside the catchpad funclet, so the funclet
+         --  must be active (typeid.for needs the bundle).
+
+         Set_Current_Funclet (Pad_Tok);
+         Position_Builder_At_End (CP_BB);
+
+         for J in 1 .. Clauses.Last loop
+            BB := Create_Basic_Block;
+            Build_Cond_Br
+              (I_Cmp (Int_EQ, Selector,
+                      Get_EH_Slot (Clauses.Table (J).Exc)),
+               Clauses.Table (J).BB, BB);
+            Position_Builder_At_End (BB);
+         end loop;
+
+         --  If this block catches unhandled exceptions, dispatch the special
+         --  __gnat_unhandled_others_value to __gnat_unhandled_except_handler.
+         --  Catch_Unhandled is currently SEH-gated (see GNATLLVM.Subprograms),
+         --  so this is unreachable on wasm today; kept for parity with the
+         --  landingpad path and correctness if wasm ever enables it.
+
+         if BI.Catch_Unhandled then
+            declare
+               Handler_BB : constant Basic_Block_T :=
+                 Create_Basic_Block ("UNHANDLED_OTHERS");
+            begin
+               Position_Builder_At_End (Handler_BB);
+               Call (Unhandler_Fn, (1 => Exc_Ptr));
+               Build_Unreachable;
+
+               Position_Builder_At_End (BB);
+               BB := Create_Basic_Block;
+               Build_Cond_Br
+                 (I_Cmp (Int_EQ, Selector,
+                         Call (EH_Slot_Id_Fn,
+                               (1 => Unhandled_Others_Value))),
+                  Handler_BB, BB);
+            end;
+         end if;
+
+         --  No clause matched: continue unwinding out of the catchpad with
+         --  llvm.wasm.rethrow (emits the rethrow + unreachable).  Move to the
+         --  final fall-through block first; the Catch_Unhandled branch above
+         --  leaves the builder on an already-terminated predecessor.
+
+         Position_Builder_At_End (BB);
+         Build_Wasm_Rethrow (Pad_Tok, Outer_Unwind);
+         Set_Current_Funclet (Saved_Funclet);
+         Set_Current_Funclet_Unwind (Saved_Unwind);
+
+      else
+         --  Cleanup-only block: cleanuppad running the At_End/Finally code.
+
+         Position_Builder_At_End (BI.Landing_Pad);
+         Pad_Tok := Build_Cleanup_Pad (Enclosing_Pad);
+         Set_Current_Funclet (Pad_Tok);
+         Set_Current_Funclet_Unwind (Outer_Unwind);
+
+         --  A cleanuppad has no get.exception; supply a null exception pointer
+         --  so an At_End that passes the exception (e.g. end_handler) still
+         --  gets its full argument list.
+
+         if BI.At_End_Pass_Excptr then
+            BI.Exc_Ptr := Const_Null (A_Char_GL_Type);
+         end if;
+
+         Call_At_End (Block, For_Exception => True);
+         Build_Cleanup_Ret (Pad_Tok, Outer_Unwind);
+         Set_Current_Funclet (Saved_Funclet);
+         Set_Current_Funclet_Unwind (Saved_Unwind);
+      end if;
+
+      Position_Builder_At_End (Next_BB);
+   end Emit_Handlers_Wasm;
+
    -------------------
    -- Emit_Handlers --
    -------------------
@@ -1139,6 +1445,13 @@ package body GNATLLVM.Blocks is
          Table_Name           => "Exceptions_Seen");
 
    begin
+      --  On wasm with native EH enabled, emit the funclet form instead.
+
+      if Wasm_EH_Enabled then
+         Emit_Handlers_Wasm (Block);
+         return;
+      end if;
+
       --  The exception handling information has four parts: the landingpad
       --  instruction itself, the exception handlers themselves, code to
       --  dispatch to the proper exception handler, and the code that's
@@ -1520,6 +1833,15 @@ package body GNATLLVM.Blocks is
 
    procedure Emit_Reraise is
    begin
+      --  On wasm with native EH, a bare re-raise inside a handler funclet
+      --  must continue unwinding via llvm.wasm.rethrow, not the Itanium
+      --  __gnat_reraise_zcx path.
+
+      if Wasm_EH_Enabled and then Present (Current_Funclet) then
+         Build_Wasm_Rethrow (Current_Funclet, Current_Funclet_Unwind);
+         return;
+      end if;
+
       --  Find the innermost block that has exception data. Call reraise
       --  with that data.
 

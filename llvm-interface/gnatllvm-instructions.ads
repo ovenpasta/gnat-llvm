@@ -1069,6 +1069,51 @@ package GNATLLVM.Instructions is
    procedure Build_Resume (V : GL_Value)
      with Pre => Present (V), Inline;
 
+   --  Native WebAssembly EH (funclet) support.  When Current_Funclet is set,
+   --  Call_Internal attaches the mandatory "funclet" operand bundle to every
+   --  call/invoke it emits, so code inside a catchpad/cleanuppad is
+   --  well-formed.  Tokens are kept as raw Value_T (they have no GL_Type).
+
+   procedure Set_Current_Funclet (Pad : Value_T);
+   function Current_Funclet return Value_T;
+
+   --  The unwind destination of the current funclet's catchswitch (where a
+   --  re-raise out of the current handler must go).  No_BB_T = unwind to the
+   --  caller.
+   procedure Set_Current_Funclet_Unwind (BB : Basic_Block_T);
+   function Current_Funclet_Unwind return Basic_Block_T;
+
+   function Token_None return Value_T;
+   --  ConstantTokenNone, the "within none" parent pad.
+
+   function Build_Catch_Switch
+     (Parent_Pad   : Value_T;
+      Unwind_BB    : Basic_Block_T;
+      Num_Handlers : Nat;
+      Name         : String := "") return Value_T;
+
+   procedure Add_Catch_Handler (Catch_Switch : Value_T; Dest : Basic_Block_T);
+
+   function Build_Catch_Pad
+     (Parent_Pad : Value_T;
+      Excs       : GL_Value_Array;
+      Name       : String := "") return Value_T;
+
+   function Build_Cleanup_Pad
+     (Parent_Pad : Value_T; Name : String := "") return Value_T;
+
+   procedure Build_Catch_Ret (Pad : Value_T; Dest : Basic_Block_T);
+
+   procedure Build_Cleanup_Ret (Pad : Value_T; Unwind_BB : Basic_Block_T);
+   --  Unwind_BB = No_BB_T means "unwind to caller".
+
+   function Wasm_Get_Exception (Pad : Value_T) return GL_Value;
+   function Wasm_Get_Selector (Pad : Value_T) return GL_Value;
+
+   procedure Build_Wasm_Rethrow (Pad : Value_T; Unwind_BB : Basic_Block_T);
+   --  Re-raise from inside the funclet Pad via llvm.wasm.rethrow.  Unwind_BB
+   --  is the enclosing catchswitch's unwind dest (No_BB_T = to caller).
+
    function Inline_Asm
      (Args           : GL_Value_Array;
       Output_Value   : Entity_Id;
