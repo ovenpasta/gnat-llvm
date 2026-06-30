@@ -1298,6 +1298,14 @@ package body GNATLLVM.Blocks is
          Set_Current_Funclet (Pad_Tok);
          Position_Builder_At_End (CP_BB);
 
+         --  Seed the fall-through to the catchpad itself so that a block with
+         --  no explicit handler clauses (only Catch_Unhandled) leaves BB
+         --  defined: the dispatch loop below would otherwise not run and the
+         --  Catch_Unhandled branch would position the builder on an
+         --  uninitialized block.
+
+         BB := CP_BB;
+
          for J in 1 .. Clauses.Last loop
             BB := Create_Basic_Block;
             Build_Cond_Br
