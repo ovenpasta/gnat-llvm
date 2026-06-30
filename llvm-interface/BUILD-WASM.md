@@ -86,20 +86,25 @@ gnat-llvm/
 
 ## Step 1: Set Up GCC Sources
 
-The GNAT-LLVM compiler uses the GCC 16 Ada frontend sources. Clone or
-extract the GCC 16 source tree and create the required symlink:
+The GNAT-LLVM compiler uses the GCC 16.1.0 Ada frontend sources. Clone the
+release, apply the local GNAT patches, and create the required symlink:
 
 ```bash
 cd gnat-llvm/llvm-interface
 # If not already present:
-# git clone https://gcc.gnu.org/git/gcc.git gcc
+# git clone --branch releases/gcc-16.1.0 --depth 1 \
+#     https://gcc.gnu.org/git/gcc.git gcc
 git -C gcc apply ../patches/gcc-16-repinfo-accessors.patch
+git -C gcc apply ../patches/gcc-16-allow-reraise-no-propagation.patch
+git -C gcc apply ../patches/gcc-16-wasm-eh-raise-gcc.patch
 ln -sf gcc/gcc/ada gnat_src
 ```
 
-The patch adds a small `Repinfo` accessor API used by
-`gnatllvm-records-debug.adb`. It is currently required when building
-GNAT-LLVM against upstream GCC 16 sources.
+The first patch adds a small `Repinfo` accessor API used by
+`gnatllvm-records-debug.adb`. The other two enable the WebAssembly
+exception-handling runtimes (`gcc-16-wasm-eh-raise-gcc.patch` adapts the GNAT
+personality `raise-gcc.c` for native wasm EH); they are required to build the
+`-eh` runtimes below.
 
 ## Step 2: Build the GNAT-LLVM Compiler
 
@@ -172,6 +177,23 @@ LD_LIBRARY_PATH=/usr/lib make wasm
 
 For the pinned Arch LLVM 21 setup, use the same `PATH`, `LLVM_CONFIG`, and
 `CLANG_LINK_LIB` selection described in `Toolchain Selection`.
+
+### Runtime variants
+
+| Target               | Output tree                | Exceptions               |
+|----------------------|----------------------------|--------------------------|
+| `make wasm`          | `rts-wasm`                 | local only               |
+| `make wasm-emcc`     | `rts-wasm-emcc`            | local only               |
+| `make wasm-eh`       | `rts-wasm-eh`              | full (native wasm EH)    |
+| `make wasm-emcc-eh`  | `rts-wasm-emcc-eh`         | full (native wasm EH)    |
+
+The `-eh` runtimes add real Ada exception propagation (raise/catch across
+frames, finalization, `Exception_Name`/`Message`/`Identity`) via native
+WebAssembly exception handling; the others keep `No_Exception_Propagation`.
+The EH encoding is legacy (`try`/`catch`) by default; set `GNAT_WASM_EH=exnref`
+for the standardized exnref (`try_table`/`throw_ref`) encoding - use the same
+value for the RTS build and the application, and point `--RTS=` at the matching
+tree (exnref trees carry a `-exnref` suffix).
 
 ### What `make wasm` does
 

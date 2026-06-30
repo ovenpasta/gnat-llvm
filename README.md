@@ -22,16 +22,22 @@ To build GNAT LLVM from sources, follow these steps:
 
 - First do a checkout of this repository and go to this directory:
 
-      git clone https://github.com/AdaCore/gnat-llvm.git
+      git clone https://github.com/ovenpasta/gnat-llvm.git
       cd gnat-llvm
 
-- Then obtain a checkout of GCC under the llvm-interface directory:
+- Then obtain a checkout of GCC 16.1.0 under the llvm-interface directory:
 
-      git clone https://github.com/gcc-mirror/gcc.git llvm-interface/gcc
+      git clone --branch releases/gcc-16.1.0 --depth 1 \
+          https://github.com/gcc-mirror/gcc.git llvm-interface/gcc
 
-  GNAT-LLVM currently needs a small GCC `Repinfo` accessor patch. Apply:
+  Apply the local GNAT patches (in `llvm-interface/patches/`):
 
       git -C llvm-interface/gcc apply ../patches/gcc-16-repinfo-accessors.patch
+      git -C llvm-interface/gcc apply ../patches/gcc-16-allow-reraise-no-propagation.patch
+      git -C llvm-interface/gcc apply ../patches/gcc-16-wasm-eh-raise-gcc.patch
+
+  The first is a `Repinfo` accessor patch needed by GNAT-LLVM generally; the
+  other two enable the WebAssembly exception-handling runtimes.
 
   then under non Windows systems:
 
@@ -147,12 +153,19 @@ All runtimes are installed under `llvm-interface/` after building.
 **ZFP** (Zero Footprint Profile) targets bare-metal environments with no OS
 support, tasking, or exceptions.
 
-**WASM** builds require AdaWebPack (https://github.com/ovenpasta/adawebpack,
-branch `gcc-16-wasm-rts`), a separate repository checked out as
-`llvm-interface/adawebpack_src/`. Two runtimes are provided: standalone TLSF
-(`rts-wasm`) and Emscripten-delegating (`rts-wasm-emcc`). Select a runtime
-with `--RTS=`; see [llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md)
-for details.
+**WASM** builds require AdaWebPack (https://github.com/ovenpasta/adawebpack),
+a separate repository checked out as `llvm-interface/adawebpack_src/`. Two
+runtimes are provided: standalone TLSF (`rts-wasm`) and Emscripten-delegating
+(`rts-wasm-emcc`). Select a runtime with `--RTS=`; see
+[llvm-interface/BUILD-WASM.md](llvm-interface/BUILD-WASM.md) for details.
+
+On WASM, Ada exceptions propagate for real (raise/catch across frames,
+finalization, `Exception_Name`/`Message`/`Identity`) using native WebAssembly
+exception handling. Build the EH runtimes with `make wasm-emcc-eh` (Emscripten)
+or `make wasm-eh` (standalone). The legacy `try`/`catch` encoding is the
+default; set `GNAT_WASM_EH=exnref` to use the standardized exnref encoding
+instead. The plain `rts-wasm` / `rts-wasm-emcc` runtimes stay
+`No_Exception_Propagation` (local handlers only).
 
 **CCG** (C Code Generator) translates Ada to C via LLVM IR. Activate with
 the `CCG=1` environment variable, or name the compiler binary `c-*` (e.g.
