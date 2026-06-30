@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include <optional>
 
 #include "llvm-c/Types.h"
@@ -1554,6 +1555,32 @@ bool
 Wasm_EH_Legacy (void)
 {
   return g_wasm_eh_legacy;
+}
+
+// Encoding selector for native wasm EH, read from the environment.  Legacy
+// (try/catch) is the default - it is what Rust and Emscripten still default
+// to and every engine supports it.  Setting GNAT_WASM_EH=exnref opts into the
+// standardized exnref (try_table/throw_ref) encoding, like Rust's unstable
+// wasm-EH switch.  The choice must match the runtime build and the engine, so
+// the same variable also drives the RTS C compiles (see Makefile.target).
+extern "C"
+bool
+Wasm_EH_Encoding_Is_Legacy (void)
+{
+  const char *e = getenv ("GNAT_WASM_EH");
+  return !(e != nullptr && strcmp (e, "exnref") == 0);
+}
+
+// True unless GNAT_WASM_EH is set to an unrecognized value.  A typo would
+// otherwise silently fall back to legacy and mismatch the runtime build, so
+// the front end rejects it (see GNATLLVM.Codegen).
+extern "C"
+bool
+Wasm_EH_Encoding_Valid (void)
+{
+  const char *e = getenv ("GNAT_WASM_EH");
+  return e == nullptr || e[0] == '\0'
+         || strcmp (e, "legacy") == 0 || strcmp (e, "exnref") == 0;
 }
 
 extern "C"

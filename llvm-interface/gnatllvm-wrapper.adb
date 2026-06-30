@@ -334,6 +334,30 @@ package body GNATLLVM.Wrapper is
       return Wasm_EH_Legacy_C /= 0;
    end Wasm_EH_Legacy;
 
+   -------------------------------
+   -- Wasm_EH_Encoding_Is_Legacy --
+   -------------------------------
+
+   function Wasm_EH_Encoding_Is_Legacy return Boolean is
+      function Wasm_EH_Encoding_Is_Legacy_C return LLVM_Bool
+        with Import, Convention => C,
+             External_Name => "Wasm_EH_Encoding_Is_Legacy";
+   begin
+      return Wasm_EH_Encoding_Is_Legacy_C /= 0;
+   end Wasm_EH_Encoding_Is_Legacy;
+
+   ---------------------------
+   -- Wasm_EH_Encoding_Valid --
+   ---------------------------
+
+   function Wasm_EH_Encoding_Valid return Boolean is
+      function Wasm_EH_Encoding_Valid_C return LLVM_Bool
+        with Import, Convention => C,
+             External_Name => "Wasm_EH_Encoding_Valid";
+   begin
+      return Wasm_EH_Encoding_Valid_C /= 0;
+   end Wasm_EH_Encoding_Valid;
+
    ---------------------------------------
    -- Set_Wasm_EH_Command_Line_Options --
    ---------------------------------------

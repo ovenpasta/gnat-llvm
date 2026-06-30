@@ -568,6 +568,17 @@ package GNATLLVM.Wrapper is
 
    function Wasm_EH_Legacy return Boolean;
 
+   function Wasm_EH_Encoding_Is_Legacy return Boolean;
+   --  The wasm EH encoding selected by the environment: True (legacy
+   --  try/catch, the default) unless GNAT_WASM_EH=exnref, which opts into the
+   --  standardized exnref (try_table/throw_ref) encoding.  Must match the RTS
+   --  build and the engine; the same variable drives the RTS C compiles.
+
+   function Wasm_EH_Encoding_Valid return Boolean;
+   --  False when GNAT_WASM_EH is set to an unrecognized value (anything other
+   --  than unset, "legacy", or "exnref").  Used to reject typos that would
+   --  otherwise silently fall back to legacy.
+
    function Recreate_Target_Machine_With_Wasm_EH
      (Old : Target_Machine_T) return Target_Machine_T
      with Import, Convention => C,

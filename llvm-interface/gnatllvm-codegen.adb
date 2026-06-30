@@ -640,20 +640,30 @@ package body GNATLLVM.Codegen is
       --  Enable native WebAssembly exception handling (funclet IR) when
       --  targeting wasm with back-end exceptions in effect (i.e. not the
       --  No_Exception_Propagation profile).  Off otherwise, so the current
-      --  wasm runtime build is unchanged.  Legacy encoding by default.  Set
-      --  the state deterministically (both the on and off cases) so it does
-      --  not leak across codegen sessions in a reused process.  The backend
-      --  cl::opts must be set in addition to the exception model: the wasm
-      --  backend gates funclet EH on them and otherwise silently drops it.
+      --  wasm runtime build is unchanged.  The encoding is legacy (try/catch)
+      --  by default and exnref (try_table/throw_ref) when GNAT_WASM_EH=exnref
+      --  - the runtime build and engine must agree.  Set the state
+      --  deterministically (both the on and off cases) so it does not leak
+      --  across codegen sessions in a reused process.  The backend cl::opts
+      --  must be set in addition to the exception model: the wasm backend
+      --  gates funclet EH on them and otherwise silently drops it.
 
       declare
          Wasm_EH_On : constant Boolean :=
            Is_Wasm (Normalized_Target_Triple.all)
              and then not No_Exception_Propagation_Active;
+         Legacy_Enc : constant Boolean := Wasm_EH_Encoding_Is_Legacy;
       begin
-         Set_Wasm_EH (Enabled => Wasm_EH_On, Legacy => True);
+         --  A typo in GNAT_WASM_EH would silently fall back to legacy and
+         --  mismatch the runtime build, so reject anything but legacy/exnref.
+         if Wasm_EH_On and then not Wasm_EH_Encoding_Valid then
+            Early_Error
+              ("GNAT_WASM_EH must be ""legacy"" or ""exnref""");
+         end if;
+
+         Set_Wasm_EH (Enabled => Wasm_EH_On, Legacy => Legacy_Enc);
          Set_Wasm_EH_Command_Line_Options
-           (Enabled => Wasm_EH_On, Legacy => True);
+           (Enabled => Wasm_EH_On, Legacy => Legacy_Enc);
       end;
 
       if not PIC_PIE_Set then
