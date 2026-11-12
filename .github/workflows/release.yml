@@ -1,0 +1,174 @@
+#  Build GNAT-LLVM binary toolchains (compiler + native and wasm32 runtimes,
+#  bundled clang / wasm-ld) and publish them as a GitHub release, together
+#  with an Alire index manifest for the gnat_llvm toolchain crate.
+#
+#  Runs on a "v*" tag push (publishes a release) or manually (artifacts only,
+#  unless "release" is set).
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      adawebpack_ref:
+        description: "ovenpasta/adawebpack ref"
+        default: master
+      release:
+        description: "Publish a GitHub release (needs a tag ref)"
+        type: boolean
+        default: false
+
+env:
+  CRATE_VERSION: "16.1.0"
+  LLVM_VERSION: "21.1.8"
+  EMSDK_VERSION: "5.0.2"
+  WASI_SDK: "34"
+  GNAT_FSF: "gnat-15.2.0-1"
+  GPRBUILD_FSF: "gprbuild-25.0.0-1"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+            gnat_sha: 4640d4b369833947ab1a156753f4db0ecd44b0f14410b5b2bc2a14df496604bb
+            gprbuild_sha: 9a2e6cfb9c4add85c7c411e95533c46728aae7de19a9a0b056abf53bd9795b0d
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+            gnat_sha: 54b1000a1b85f0ec241c71d375bae7602239875a01132f5dc5789a632870a1c7
+            gprbuild_sha: 5e58c08eb6d0bd15f98654777a53fbb1e4329e38fec7074de08429989850562b
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      #  GNAT 15 and gprbuild from the same builds Alire's gnat_native and
+      #  gprbuild crates use (glibc 2.35 baseline, as for this toolchain).
+      - name: Install GNAT and gprbuild
+        run: |
+          fetch () {  # fetch URL SHA256 DIR
+            curl -sSfL -o pkg.tar.gz "$1"
+            echo "$2  pkg.tar.gz" | sha256sum -c -
+            mkdir -p "$3" && tar -C "$3" --strip-components=1 -xzf pkg.tar.gz
+            rm pkg.tar.gz
+          }
+          FSF=https://github.com/alire-project/GNAT-FSF-builds/releases/download
+          fetch "$FSF/$GNAT_FSF/gnat-${{ matrix.arch }}-linux-${GNAT_FSF#gnat-}.tar.gz" \
+            ${{ matrix.gnat_sha }} "$HOME/gnat"
+          fetch "$FSF/$GPRBUILD_FSF/gprbuild-${{ matrix.arch }}-linux-${GPRBUILD_FSF#gprbuild-}.tar.gz" \
+            ${{ matrix.gprbuild_sha }} "$HOME/gprbuild"
+          echo "$HOME/gnat/bin" >> "$GITHUB_PATH"
+          echo "$HOME/gprbuild/bin" >> "$GITHUB_PATH"
+
+      - name: Cache LLVM
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/llvm
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.arch }}-${{ hashFiles('packaging/ci/build-llvm.sh') }}
+
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          CC=gcc CXX=g++ WORK=$RUNNER_TEMP/llvm-work \
+            packaging/ci/build-llvm.sh "$HOME/llvm"
+          rm -rf "$RUNNER_TEMP/llvm-work"
+
+      - name: Fetch sources
+        env:
+          ADAWEBPACK_REF: ${{ inputs.adawebpack_ref || 'master' }}
+        run: packaging/ci/build-toolchain.sh sources
+
+      - name: Build compiler and native runtime
+        run: |
+          LLVM_PREFIX=$HOME/llvm packaging/ci/build-toolchain.sh compiler
+          #  Only libc / libm / libpthread etc. may remain dynamic.
+          ldd llvm-interface/bin/llvm-gnat1
+          if ldd llvm-interface/bin/llvm-gnat1 | grep -E 'LLVM|clang|stdc\+\+'; then
+            echo "llvm-gnat1 is not statically linked against LLVM" >&2
+            exit 1
+          fi
+
+      - name: Install Emscripten and the WASI sysroot
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$HOME/emsdk/emsdk" activate "$EMSDK_VERSION"
+          EMCC=$HOME/emsdk/upstream/emscripten/emcc
+          #  First use installs the sysroot headers the runtime build needs.
+          echo 'int main(void){return 0;}' > t.c && "$EMCC" -c t.c -o t.o && rm t.[co]
+          echo "EMCC=$EMCC" >> "$GITHUB_ENV"
+          curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$WASI_SDK/wasi-sysroot-$WASI_SDK.0.tar.gz" \
+            | tar -C "$HOME" -xzf -
+          echo "WASI_SYSROOT=$HOME/wasi-sysroot-$WASI_SDK.0" >> "$GITHUB_ENV"
+
+      - name: Build wasm32 runtimes
+        run: LLVM_PREFIX=$HOME/llvm packaging/ci/build-toolchain.sh wasm
+
+      - name: Package
+        run: |
+          VERSION=$CRATE_VERSION LLVM_PREFIX=$HOME/llvm \
+          URL_BASE="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            packaging/alire/make-dist.sh "$RUNNER_TEMP/dist"
+
+      - name: Smoke test (wasm32 and native)
+        run: |
+          T=$(ls -d "$RUNNER_TEMP"/dist/stage/gnat_llvm-*)
+          cd packaging/alire/hello_wasm
+          PATH=$T/bin:$PATH GNAT_LLVM_PREFIX=$T gprbuild -p -P hello_wasm.gpr
+          node run.mjs | tee out.txt
+          grep -q "caught Boom" out.txt
+          mkdir -p "$RUNNER_TEMP/native" && cd "$RUNNER_TEMP/native"
+          printf 'with Ada.Text_IO;\nprocedure Hi is\nbegin\n   Ada.Text_IO.Put_Line ("native ok");\nend Hi;\n' > hi.adb
+          PATH=$T/bin:$PATH llvm-gnatmake hi.adb
+          ./hi | grep -q "native ok"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnat_llvm-${{ matrix.arch }}-linux
+          path: |
+            ${{ runner.temp }}/dist/*.tar.gz
+            ${{ runner.temp }}/dist/*.sha256
+            ${{ runner.temp }}/dist/*.origin.toml
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Alire manifest
+        run: |
+          VERSION=$CRATE_VERSION packaging/alire/make-manifest.sh index dist/*.origin.toml
+          cp index/gn/gnat_llvm/gnat_llvm-$CRATE_VERSION.toml dist/
+          cat dist/gnat_llvm-$CRATE_VERSION.toml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alire-manifest
+          path: dist/gnat_llvm-*.toml
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/') && (github.event_name == 'push' || inputs.release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" --draft \
+            --title "GNAT-LLVM ${{ github.ref_name }}" \
+            --notes "GNAT-LLVM $CRATE_VERSION (LLVM $LLVM_VERSION) with wasm32 and native runtimes. Alire manifest: gnat_llvm-$CRATE_VERSION.toml" \
+            dist/*.tar.gz dist/*.sha256 dist/gnat_llvm-$CRATE_VERSION.toml

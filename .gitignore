@@ -1,6 +1,6 @@
 # Alire workspace stub (enables alr exec for Ada tooling)
-alire.toml
-alire/
+/alire.toml
+/alire/
 
 # Build/test results directories
 alis.list

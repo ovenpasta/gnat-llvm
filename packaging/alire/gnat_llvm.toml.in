@@ -1,0 +1,27 @@
+name = "gnat_llvm"
+version = "@VERSION@"
+provides = ["gnat=@VERSION@"]
+description = "GNAT-LLVM Ada compiler with WebAssembly and native runtimes"
+long-description = """
+GNAT-LLVM (GCC @VERSION@ front end, LLVM 21 back end) with prebuilt runtimes:
+
+- wasm32: rts-wasm, rts-wasm-eh, rts-wasm-emcc, rts-wasm-emcc-eh,
+  rts-wasm-wasi-eh (and -exnref variants of the EH runtimes)
+- native: rts-native
+
+Projects use `for Target use "llvm";` and select a runtime with
+`for Runtime ("Ada") use external ("GNAT_LLVM_PREFIX") & "/lib/gnat-llvm/wasm32/rts-wasm-eh";`
+"""
+maintainers = ["Aldo Nicolas Bruno <ovenpasta@pizzahack.eu>"]
+maintainers-logins = ["ovenpasta"]
+licenses = "GPL-3.0-or-later AND GPL-3.0-or-later WITH GCC-exception-3.1"
+website = "https://github.com/ovenpasta/gnat-llvm"
+
+auto-gpr-with = false
+
+[configuration]
+disabled = true
+
+[environment]
+PATH.prepend = "${CRATE_ROOT}/bin"
+GNAT_LLVM_PREFIX.set = "${CRATE_ROOT}"

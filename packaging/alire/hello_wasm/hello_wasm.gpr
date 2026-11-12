@@ -1,0 +1,33 @@
+project Hello_Wasm is
+
+   --  Set by the gnat_llvm toolchain crate's environment
+   Prefix  := external ("GNAT_LLVM_PREFIX");
+   Runtime := external ("GNAT_LLVM_RUNTIME", "rts-wasm-eh");
+
+   for Target use "llvm";
+   for Runtime ("Ada") use Prefix & "/lib/gnat-llvm/wasm32/" & Runtime;
+
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj";
+   for Exec_Dir use "bin";
+   for Main use ("hello.adb");
+
+   package Compiler is
+      for Switches ("Ada") use ("--target=wasm32", "-O1");
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-z");
+   end Binder;
+
+   package Linker is
+      for Switches ("Ada") use
+        ("--target=wasm32", "-nostdlib", "-Wl,--export-all",
+         "-Wl,--allow-undefined", "-Wl,--no-entry");
+   end Linker;
+
+   package Builder is
+      for Executable ("hello.adb") use "hello.wasm";
+   end Builder;
+
+end Hello_Wasm;

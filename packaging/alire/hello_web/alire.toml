@@ -1,0 +1,16 @@
+name = "hello_web"
+description = "Smoke test for the adawebpack crate on the gnat_llvm toolchain"
+version = "0.1.0"
+licenses = "Apache-2.0"
+authors = ["Aldo Nicolas Bruno"]
+maintainers = ["Aldo Nicolas Bruno <ovenpasta@pizzahack.eu>"]
+maintainers-logins = ["ovenpasta"]
+
+[[depends-on]]
+adawebpack = "*"
+
+[[pins]]
+adawebpack = { path = "../../../llvm-interface/adawebpack_src" }
+
+[gpr-set-externals]
+ADAWEBPACK_RUNTIME = "wasm-eh"
