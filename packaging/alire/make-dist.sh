@@ -66,6 +66,15 @@ tar -C "$LLVM_INTERFACE/lib" -X "$EXCLUDES" -chf - gnat-llvm \
   | tar -C "$STAGE/lib" -xf -
 rm "$EXCLUDES"
 
+#  lib/rts-native -> gnat-llvm/<triple>/rts-native: where the gprconfig
+#  knowledge base of FSF gprbuild looks for the GNAT_LLVM native runtime.
+if [ -L "$LLVM_INTERFACE/lib/rts-native" ]; then
+   LINK=$(readlink "$LLVM_INTERFACE/lib/rts-native")
+   if [ -d "$STAGE/lib/$LINK" ]; then
+      ln -s "$LINK" "$STAGE/lib/rts-native"
+   fi
+fi
+
 #  Bundled LLVM tools: llvm-gcc links through clang, wasm32 through wasm-ld.
 if [ -n "$LLVM_PREFIX" ]; then
    for t in clang lld llvm-ar; do

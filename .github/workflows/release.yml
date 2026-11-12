@@ -130,6 +130,11 @@ jobs:
           printf 'with Ada.Text_IO;\nprocedure Hi is\nbegin\n   Ada.Text_IO.Put_Line ("native ok");\nend Hi;\n' > hi.adb
           PATH=$T/bin:$PATH llvm-gnatmake hi.adb
           ./hi | grep -q "native ok"
+          #  gprbuild must pick GNAT_LLVM, not the GNAT 15 also on PATH
+          rm -f hi hi.o hi.ali b~*
+          PATH=$T/bin:$PATH gprbuild hi.adb
+          ./hi | grep -q "native ok"
+          grep -q "GNAT Lib v16" hi.ali
 
       - uses: actions/upload-artifact@v4
         with:

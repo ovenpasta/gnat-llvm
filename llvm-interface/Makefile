@@ -308,7 +308,12 @@ gnatlib-bc:
 # Clang 16 complains about a missing function declaration in raise-gcc.c
 # (eng/toolchain/gnat-llvm#5). Until we have a proper fix, disable the warning
 # when building the runtime.
+#
+# The gprconfig knowledge base of FSF gprbuild (as used by Alire) only finds
+# the GNAT_LLVM native runtime at lib/rts-native, and otherwise falls back to
+# a native GNAT for the runtime build, so provide that location as a link.
 quicklib: $(RTSDIR) $(LIBEXEC_DIR)
+	ln -sfn gnat-llvm/$(llvm_target)/$(RTSBASE) $(pwd)/lib/$(RTSBASE)
 	PATH=$(pwd)/bin:$(clang_path):$$PATH \
 	$(GPRBUILD) -p --target=$(target) $(RTSSWITCH) -j$(PROCS) -P$(RTSDIR)/libada \
 	  -XCFLAGS="$(CFLAGS) -I$(LLVM_INCLUDE_DIR)" \
