@@ -104,7 +104,8 @@ setup:
 	done
 	./check_for_LLVM_aliasing_bug.sh "$(LLVM_CONFIG)"
 	./check_for_llvm_apis.sh "$(LLVM_CONFIG)"
-	./configure_default_target.sh "$(llvm_target)"
+	./configure_default_target.sh "$(llvm_target)" \
+	  "$(shell $(LLVM_CONFIG) --version)"
 
 build: setup force
 	$(GPRBUILD) -Pgnat_llvm -j$(PROCS) \

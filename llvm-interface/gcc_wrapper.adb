@@ -221,6 +221,8 @@ procedure GCC_Wrapper is
             end if;
          end;
 
+         Put_Line ("LLVM " & LLVM_Version);
+
          Put_Line ("Copyright (C) 2018-" & Gnatvsn.Current_Year &
                      " Free Software Foundation, Inc.");
          Put_Line ("This is free software; see the source for copying " &

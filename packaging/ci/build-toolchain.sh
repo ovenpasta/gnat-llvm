@@ -69,7 +69,7 @@ step_compiler () {
    #  with copied (not symlinked) sources.
    llvm_make gnatlib-automated
    #  The default target triple is baked in from "clang -dumpmachine".
-   if grep -q '""' "$LI/obj/options-target.ads"; then
+   if grep -q 'Triple : constant String := ""' "$LI/obj/options-target.ads"; then
       echo "error: empty default target triple" >&2
       exit 1
    fi
