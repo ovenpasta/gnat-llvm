@@ -1,6 +1,8 @@
 GNAT LLVM
 =========
 
+[![release](https://github.com/ovenpasta/gnat-llvm/actions/workflows/release.yml/badge.svg)](https://github.com/ovenpasta/gnat-llvm/actions/workflows/release.yml)
+
 This is an Ada compiler based on LLVM, connecting the GNAT front-end to the
 LLVM code generator to generate LLVM bitcode for Ada and to open the LLVM
 ecosystem to Ada.
