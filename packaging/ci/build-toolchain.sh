@@ -57,10 +57,13 @@ step_sources () {
 llvm_make () {
    #  LDFLAGS replaces the Makefile's shared-LLVM default: link LLVM and
    #  clangBasic statically, libstdc++/libgcc too (see gnat_llvm.gpr).
+   #  llvm-config prints one line per option; a newline inside LDFLAGS
+   #  would end the recipe's gprbuild command, hence the tr.
    LLVM_CONFIG=$LLVM_PREFIX/bin/llvm-config
    PATH=$LLVM_PREFIX/bin:$PATH make -C "$LI" PROCS="$JOBS" \
      LLVM_CONFIG="$LLVM_CONFIG" CLANG_LINK_LIB=clangBasic \
-     LDFLAGS="$($LLVM_CONFIG --link-static --ldflags --libs all --system-libs)" \
+     LDFLAGS="$($LLVM_CONFIG --link-static --ldflags --libs all --system-libs \
+                | tr '\n' ' ')" \
      "$@"
 }
 

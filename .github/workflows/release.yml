@@ -68,9 +68,11 @@ jobs:
           echo "$HOME/gnat/bin" >> "$GITHUB_PATH"
           echo "$HOME/gprbuild/bin" >> "$GITHUB_PATH"
 
-      - name: Cache LLVM
+      #  Restore and save are separate steps so the LLVM build is cached as
+      #  soon as it succeeds, even if a later step fails.
+      - name: Restore LLVM
         id: llvm-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/llvm
           key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.arch }}-${{ hashFiles('packaging/ci/build-llvm.sh') }}
@@ -81,6 +83,13 @@ jobs:
           CC=gcc CXX=g++ WORK=$RUNNER_TEMP/llvm-work \
             packaging/ci/build-llvm.sh "$HOME/llvm"
           rm -rf "$RUNNER_TEMP/llvm-work"
+
+      - name: Save LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/llvm
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
 
       - name: Fetch sources
         env:
