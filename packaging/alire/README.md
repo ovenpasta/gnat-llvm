@@ -1,5 +1,9 @@
 # Alire packaging for GNAT-LLVM
 
+Users: add the index and see its README for usage,
+
+    alr index --add git+https://github.com/ovenpasta/alire-index-gnat-llvm --name gnat_llvm
+
 Two crates make GNAT-LLVM usable from Alire:
 
 - `gnat_llvm` - binary toolchain crate (provides `gnat=16.1.0`): the
@@ -120,9 +124,10 @@ machine.
    `gnat_llvm-16.1.0.toml` and creates a draft GitHub release with the
    tarballs and the manifest.
 
-The manifest can then go into a personal index (a git repo with
-`index.toml` and `gn/gnat_llvm/gnat_llvm-16.1.0.toml`, added with
-`alr index --add git+https://...`) or be submitted to the community index.
+After publishing the draft release, add its `gnat_llvm-<version>.toml` to
+https://github.com/ovenpasta/alire-index-gnat-llvm under
+`index/gn/gnat_llvm/`. Bump `CRATE_VERSION` in the workflow for every new
+toolchain build (the last digit counts builds of the same GCC release).
 
 The runtimes are built from the pushed adawebpack branch, not the local
 checkout: push local adawebpack changes before tagging.
