@@ -59,9 +59,14 @@ llvm_make () {
    #  clangBasic statically, libstdc++/libgcc too (see gnat_llvm.gpr).
    #  llvm-config prints one line per option; a newline inside LDFLAGS
    #  would end the recipe's gprbuild command, hence the tr.
+   #  llvm_target (default triple, native runtime directory) follows GNAT's
+   #  spelling of the host (gcc -dumpmachine), not LLVM's: gprconfig only
+   #  knows an archiver for e.g. "aarch64-linux-gnu", and with
+   #  "aarch64-unknown-linux-gnu" gprbuild silently skips libgnat.a.
    LLVM_CONFIG=$LLVM_PREFIX/bin/llvm-config
    PATH=$LLVM_PREFIX/bin:$PATH make -C "$LI" PROCS="$JOBS" \
      LLVM_CONFIG="$LLVM_CONFIG" CLANG_LINK_LIB=clangBasic \
+     llvm_target="$(gcc -dumpmachine)" \
      LDFLAGS="$($LLVM_CONFIG --link-static --ldflags --libs all --system-libs \
                 | tr '\n' ' ')" \
      "$@"
