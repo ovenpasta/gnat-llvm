@@ -248,7 +248,10 @@ package body GNATLLVM.Codegen is
             Code_Gen_Level := Code_Gen_Level_Less;
       elsif Starts_With (S, "-O") then
          case S (First + 2) is
-            when '1' =>
+            --  -Og ("optimize for debugging", used by Alire's development
+            --  profile) is -O1, as in Clang.
+
+            when '1' | 'g' =>
                Code_Gen_Level := Code_Gen_Level_Less;
                Code_Opt_Level := 1;
             when '2'  =>
