@@ -21,7 +21,7 @@ on:
         default: false
 
 env:
-  CRATE_VERSION: "16.1.1"  # GCC 16.1.0; last digit = toolchain build, as gnat_native
+  CRATE_VERSION: "16.1.2"  # GCC 16.1.0; last digit = toolchain build, as gnat_native
   LLVM_VERSION: "21.1.8"
   EMSDK_VERSION: "5.0.2"
   WASI_SDK: "34"
@@ -115,9 +115,12 @@ jobs:
           #  First use installs the sysroot headers the runtime build needs.
           echo 'int main(void){return 0;}' > t.c && "$EMCC" -c t.c -o t.o && rm t.[co]
           echo "EMCC=$EMCC" >> "$GITHUB_ENV"
-          curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$WASI_SDK/wasi-sysroot-$WASI_SDK.0.tar.gz" \
-            | tar -C "$HOME" -xzf -
+          WASI_URL=https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$WASI_SDK
+          curl -sSfL "$WASI_URL/wasi-sysroot-$WASI_SDK.0.tar.gz" | tar -C "$HOME" -xzf -
           echo "WASI_SYSROOT=$HOME/wasi-sysroot-$WASI_SDK.0" >> "$GITHUB_ENV"
+          #  compiler-rt builtins for wasm32-wasip1, bundled for WASI links
+          curl -sSfL "$WASI_URL/libclang_rt-$WASI_SDK.0.tar.gz" | tar -C "$HOME" -xzf -
+          echo "WASI_BUILTINS=$HOME/libclang_rt-$WASI_SDK.0" >> "$GITHUB_ENV"
 
       - name: Build wasm32 runtimes
         run: LLVM_PREFIX=$HOME/llvm packaging/ci/build-toolchain.sh wasm
@@ -135,6 +138,27 @@ jobs:
           PATH=$T/bin:$PATH GNAT_LLVM_PREFIX=$T gprbuild -p -P hello_wasm.gpr
           node run.mjs | tee out.txt
           grep -q "caught Boom" out.txt
+          #  WASI: linked by llvm-gcc with the bundled sysroot, run under
+          #  node:wasi (args, exception, file I/O, exit status)
+          cd ../hello_wasi
+          PATH=$T/bin:$PATH GNAT_LLVM_PREFIX=$T gprbuild -p -P hello_wasi.gpr
+          set +e
+          node --no-warnings run.mjs bin/hello_wasi.wasm one > out.txt
+          status=$?
+          set -e
+          cat out.txt
+          test "$status" -eq 3
+          grep -q "arg 1: one" out.txt
+          grep -q "caught: and exceptions work" out.txt
+          grep -q "file: written from WASI" out.txt
+          #  An unhandled exception prints GNAT's message and exits with 1
+          set +e
+          node --no-warnings run.mjs bin/unhandled.wasm 2> err.txt
+          status=$?
+          set -e
+          cat err.txt
+          test "$status" -eq 1
+          grep -q "raised PROGRAM_ERROR : deliberately unhandled" err.txt
           mkdir -p "$RUNNER_TEMP/native" && cd "$RUNNER_TEMP/native"
           printf 'with Ada.Text_IO;\nprocedure Hi is\nbegin\n   Ada.Text_IO.Put_Line ("native ok");\nend Hi;\n' > hi.adb
           PATH=$T/bin:$PATH llvm-gnatmake hi.adb

@@ -20,12 +20,17 @@ Two crates make GNAT-LLVM usable from Alire:
   dereferenced) into `out/gnat_llvm-<ver>-<arch>-<os>.tar.gz`, write the
   platform's manifest `[origin]` block, and generate an index in
   `out/index` (with a `file://` URL unless `URL_BASE` is set).
-  `LLVM_PREFIX=...` also bundles clang, lld and llvm-ar.
+  `LLVM_PREFIX=...` also bundles clang, lld and llvm-ar; `WASI_SYSROOT=...`
+  and `WASI_BUILTINS=...` bundle wasi-libc (wasm32-wasip1) and its
+  compiler-rt builtins for linking WASI programs.
 - `make-manifest.sh` - merge the template and one origin block per
   platform into the crate manifest (used by the release workflow).
 - `gnat_llvm.toml.in` - toolchain crate manifest template.
 - `hello_wasm/` - crate depending on `gnat_llvm` only, standalone
   `rts-wasm-eh`; `node run.mjs` prints and raises/catches an exception.
+- `hello_wasi/` - crate depending on `gnat_llvm` only, `rts-wasm-wasi-eh`,
+  linked with the bundled wasi-libc; `node run.mjs bin/hello_wasi.wasm`
+  runs it under node:wasi (args, exception, file I/O, exit status 3).
 - `hello_web/` - crate depending on `adawebpack` (path pin to the in-tree
   checkout); `alr exec -- node run.mjs` runs it with the real
   `adawebpack.mjs` glue and a minimal DOM stand-in.

@@ -17,6 +17,8 @@
 #                    (default: none, the host's clang/wasm-ld are used)
 #    URL_BASE        where the tarball will be downloaded from
 #                    (default: file://OUT_DIR, for a local index)
+#    WASI_SYSROOT    wasi-sdk sysroot to bundle the wasm32-wasip1 libc from
+#    WASI_BUILTINS   wasi-sdk libclang_rt directory (needs LLVM_PREFIX)
 
 set -eu
 
@@ -25,6 +27,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 LLVM_INTERFACE=${LLVM_INTERFACE:-$HERE/../../llvm-interface}
 LLVM_INTERFACE=$(cd "$LLVM_INTERFACE" && pwd)
 LLVM_PREFIX=${LLVM_PREFIX:-}
+WASI_SYSROOT=${WASI_SYSROOT:-}
+WASI_BUILTINS=${WASI_BUILTINS:-}
 OUT=${1:-$HERE/out}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
@@ -85,6 +89,40 @@ if [ -n "$LLVM_PREFIX" ]; then
    ln -s llvm-ar "$STAGE/bin/llvm-ranlib"
    #  clang's resource directory (builtin headers)
    cp -a "$LLVM_PREFIX/lib/clang" "$STAGE/lib/"
+fi
+
+#  WASI: the wasm32-wasip1 C part of the wasi-sdk sysroot (wasi-libc) and
+#  the matching compiler-rt builtins, placed in the bundled clang's resource
+#  directory where its driver looks for them.  With both, llvm-gcc links WASI
+#  programs given --target=wasm32-wasip1 --sysroot=<prefix>/share/wasi-sysroot.
+if [ -n "$WASI_SYSROOT" ]; then
+   D=$STAGE/share/wasi-sysroot
+   mkdir -p "$D/lib/wasm32-wasip1" "$D/include"
+   cp "$WASI_SYSROOT"/lib/wasm32-wasip1/*.a \
+      "$WASI_SYSROOT"/lib/wasm32-wasip1/*.o "$D/lib/wasm32-wasip1/"
+   #  eh/ and noeh/ hold the C++ (libc++) headers
+   tar -C "$WASI_SYSROOT/include" \
+       --exclude=wasm32-wasip1/eh --exclude=wasm32-wasip1/noeh \
+       -cf - wasm32-wasip1 | tar -C "$D/include" -xf -
+   cp "$WASI_SYSROOT/VERSION" "$D/"
+   cat > "$D/NOTICE" <<EOF
+wasi-libc for wasm32-wasip1, from the wasi-sdk sysroot
+(https://github.com/WebAssembly/wasi-sdk). wasi-libc
+(https://github.com/WebAssembly/wasi-libc) is licensed under
+Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT, and includes code
+from musl libc (MIT); see the LICENSE files in its repository.
+EOF
+fi
+if [ -n "$WASI_BUILTINS" ]; then
+   if [ ! -d "$STAGE/lib/clang" ]; then
+      echo "WASI_BUILTINS needs LLVM_PREFIX (the bundled clang)" >&2
+      exit 1
+   fi
+   for r in "$STAGE"/lib/clang/*; do
+      mkdir -p "$r/lib/wasm32-unknown-wasip1"
+      cp "$WASI_BUILTINS/wasm32-unknown-wasip1/libclang_rt.builtins.a" \
+         "$r/lib/wasm32-unknown-wasip1/"
+   done
 fi
 
 #  JS glue for the standalone (non-Emscripten) runtimes

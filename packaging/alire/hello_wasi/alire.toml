@@ -1,0 +1,10 @@
+name = "hello_wasi"
+description = "Smoke test for the gnat_llvm Alire toolchain (WASI)"
+version = "0.1.0"
+licenses = "Apache-2.0"
+authors = ["Aldo Nicolas Bruno"]
+maintainers = ["Aldo Nicolas Bruno <ovenpasta@pizzahack.eu>"]
+maintainers-logins = ["ovenpasta"]
+
+[[depends-on]]
+gnat_llvm = "^16.1.2"
