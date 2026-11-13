@@ -21,7 +21,7 @@ on:
         default: false
 
 env:
-  CRATE_VERSION: "16.1.0"
+  CRATE_VERSION: "16.1.1"  # GCC 16.1.0; last digit = toolchain build, as gnat_native
   LLVM_VERSION: "21.1.8"
   EMSDK_VERSION: "5.0.2"
   WASI_SDK: "34"
@@ -183,6 +183,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" --draft \
-            --title "GNAT-LLVM ${{ github.ref_name }}" \
-            --notes "GNAT-LLVM $CRATE_VERSION (LLVM $LLVM_VERSION) with wasm32 and native runtimes. Alire manifest: gnat_llvm-$CRATE_VERSION.toml" \
+            --title "gnat_llvm ${{ github.ref_name }}" \
+            --notes "gnat_llvm $CRATE_VERSION: GNAT-LLVM (GCC 16.1.0 front end, LLVM $LLVM_VERSION) with wasm32 and native runtimes. Alire manifest: gnat_llvm-$CRATE_VERSION.toml" \
             dist/*.tar.gz dist/*.sha256 dist/gnat_llvm-$CRATE_VERSION.toml
