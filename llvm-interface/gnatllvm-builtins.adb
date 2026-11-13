@@ -111,6 +111,13 @@ package body GNATLLVM.Builtins is
    --  Emit an atomic Store of Val from to Ptr_Val with the specified
    --  memory order and data type.
 
+   function Emit_Strncpy_Call (N : N_Subprogram_Call_Id) return GL_Value;
+   --  System.CRTL imports strncpy as an Intrinsic procedure, but the C
+   --  function returns its first argument. Call it with the C signature
+   --  and ignore the result, so the declaration agrees with libc's: wasm
+   --  checks signatures at link time and otherwise binds the call to a trap
+   --  stub.
+
    function Emit_Bswap_Call
      (N : N_Subprogram_Call_Id; S : String) return GL_Value;
    --  If N is a valid call to builtin_bswap, generate it
@@ -163,6 +170,9 @@ package body GNATLLVM.Builtins is
 
    Memory_Compare_Fn  : GL_Value := No_GL_Value;
    --  Function to compare memory
+
+   Strncpy_Fn         : GL_Value := No_GL_Value;
+   --  C strncpy, declared with its C signature (see Emit_Strncpy_Call)
 
    Stack_Save_Fn      : GL_Value := No_GL_Value;
    Stack_Restore_Fn   : GL_Value := No_GL_Value;
@@ -796,6 +806,37 @@ package body GNATLLVM.Builtins is
       return No_GL_Value;
    end Emit_Cheri_Call;
 
+   -----------------------
+   -- Emit_Strncpy_Call --
+   -----------------------
+
+   function Emit_Strncpy_Call (N : N_Subprogram_Call_Id) return GL_Value is
+      Dest : constant Opt_N_Subexpr_Id := First_Actual (N);
+      Src  : constant Opt_N_Subexpr_Id :=
+        (if Present (Dest) then Next_Actual (Dest) else Empty);
+      Len  : constant Opt_N_Subexpr_Id :=
+        (if Present (Src) then Next_Actual (Src) else Empty);
+
+   begin
+      if No (Len) or else Present (Next_Actual (Len)) then
+         return No_GL_Value;
+      end if;
+
+      if No (Strncpy_Fn) then
+         Strncpy_Fn := Add_Global_Function
+           ("strncpy",
+            Fn_Ty ((1 => Address_MD, 2 => Address_MD, 3 => Size_MD),
+                   Address_MD),
+            Address_GL_Type);
+      end if;
+
+      Discard (Call (Strncpy_Fn,
+                     (1 => Emit_Expression (Dest),
+                      2 => Emit_Expression (Src),
+                      3 => Emit_Expression (Len))));
+      return Const_True;
+   end Emit_Strncpy_Call;
+
    ---------------------
    -- Emit_Bswap_Call --
    ---------------------
@@ -1299,6 +1340,8 @@ package body GNATLLVM.Builtins is
 
       --  Check for __builtin_bswap, __builtin_expect, and __atomic_load
 
+      elsif S = "strncpy" then
+         return Emit_Strncpy_Call (N);
       elsif Name = "__builtin_bswap" then
          return Emit_Bswap_Call (N, S);
       elsif Name = "__builtin_frame_address" then
