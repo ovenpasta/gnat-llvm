@@ -1892,7 +1892,16 @@ package body GNATLLVM.Variables is
                               Get_Type_Alignment (Type_Of (LLVM_Var)));
             end if;
 
-            if not DSO_Preemptable then
+            --  As for subprograms (see Subprograms), a variable that is
+            --  only declared here (e.g. imported from libc) may live in
+            --  another module under PIC/PIE, so it needs GOT access: only
+            --  x86 copy relocations tolerate a direct reference, aarch64
+            --  rejects it at link time.
+
+            if not DSO_Preemptable
+              and then (not Is_Imported (E)
+                          or else Reloc_Mode in Reloc_Static | Reloc_Default)
+            then
                Set_DSO_Local (LLVM_Var);
             end if;
          end if;
